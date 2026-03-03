@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-inter: var(--font-inter);
+}
+
+:root {
+  /* Brand — Purple */
+  --color-brand:        #7C3AED;
+  --color-brand-bright: #9333EA;
+  --color-brand-dim:    #4C1D95;
+  --color-brand-glow:   rgba(124, 58, 237, 0.35);
+
+  /* Backgrounds */
+  --color-bg-base:      #141414;
+  --color-bg-card:      #1A1A1A;
+  --color-bg-elevated:  #232323;
+  --color-bg-navbar:    rgba(20, 20, 20, 0.96);
+  --color-bg-overlay:   rgba(0, 0, 0, 0.65);
+
+  /* Text */
+  --color-text-primary:   #FFFFFF;
+  --color-text-secondary: #B3B3B3;
+  --color-text-muted:     #6B7280;
+
+  /* Semantic */
+  --color-match-high:     #A78BFA;
+  --color-star-active:    #F59E0B;
+  --color-star-inactive:  #374151;
+  --color-border:         rgba(255, 255, 255, 0.08);
+
+  /* D3 Viz */
+  --viz-color-1:          #7C3AED;
+  --viz-color-2:          #2563EB;
+  --viz-color-3:          #059669;
+  --viz-color-4:          #D97706;
+  --viz-color-5:          #DC2626;
+  --viz-node-default:     #4B5563;
+  --viz-node-current:     #7C3AED;
+  --viz-mst-edge:         rgba(124, 58, 237, 0.6);
+  --viz-dijkstra-path:    #A78BFA;
+  --viz-heatmap-low:      #1E1B4B;
+  --viz-heatmap-high:     #7C3AED;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scrollbar-width: none;
+}
+
+html::-webkit-scrollbar {
+  display: none;
+}
+
+body {
+  background-color: var(--color-bg-base);
+  color: var(--color-text-primary);
+  font-family: var(--font-inter), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Utility: hide scrollbar on overflow-x containers */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
