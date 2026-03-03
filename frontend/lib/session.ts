@@ -41,7 +41,9 @@ export function getOrCreateToken(): string {
     }
   } catch { /* storage blocked */ }
 
-  const token = crypto.randomUUID();
+  const token = typeof crypto !== 'undefined' && crypto.randomUUID
+  ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+  
   setCookie(TOKEN_KEY, token, COOKIE_MAX_AGE);
   try { localStorage.setItem(TOKEN_KEY, token); } catch { /* storage blocked */ }
   return token;

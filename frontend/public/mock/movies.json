@@ -176,22 +176,6 @@
     "runtime": 104
   },
   {
-    "id": 238,
-    "title": "The Godfather",
-    "overview": "When organized crime patriarch Vito Corleone barely survives an assassination attempt, his youngest son Michael steps in to handle the would-be killers.",
-    "posterPath": "/3bhkrj58Vtu7enYsLowi7HCH2PJ.jpg",
-    "backdropPath": "/tmU7GeKVPlXBF3K6Kp51B2AdoGX.jpg",
-    "releaseYear": 1972,
-    "genres": ["Drama", "Crime"],
-    "cast": ["Marlon Brando", "Al Pacino", "James Caan", "Richard Castellano", "Robert Duvall"],
-    "director": "Francis Ford Coppola",
-    "keywords": ["mafia", "crime family", "loyalty", "power", "corruption"],
-    "voteAverage": 8.7,
-    "voteCount": 20000,
-    "popularity": 72.8,
-    "runtime": 175
-  },
-  {
     "id": 680,
     "title": "Pulp Fiction",
     "overview": "A burger-loving hit man, his philosophical partner, a gangster's moll and a washed-up boxer converge in this sprawling, comedic crime caper.",
