@@ -1,12 +1,9 @@
-import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
+import { tmdbClient } from '../../src/tmdb/client';
 import { preprocessMovie } from '../../src/tmdb/preprocessor';
 import type { Movie } from '../../src/types';
 
-const PROXY_BASE = process.env.TMDB_PROXY_URL ?? 'https://proxy-gate-tanendra77.vercel.app/api/proxy';
-const API_KEY    = process.env.TMDB_API_KEY;
-if (!API_KEY) throw new Error('TMDB_API_KEY environment variable is required');
 const DELAY_MS   = 300;
 const MAX_RETRIES = 3;
 
@@ -38,12 +35,9 @@ function appendMovies(movies: Movie[]): void {
 const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 async function fetchPage(page: number): Promise<{ movies: Movie[]; totalPages: number }> {
-  const tmdbUrl = `https://api.themoviedb.org/3/movie/popular?api_key=${API_KEY}&page=${page}`;
-  const url = `${PROXY_BASE}?url=${encodeURIComponent(tmdbUrl)}`;
-
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const { data } = await axios.get(url, { timeout: 15000 });
+      const { data } = await tmdbClient.get('/movie/popular', { params: { page } });
       const movies = (data.results as unknown[]).map(r =>
         preprocessMovie(r as unknown as Parameters<typeof preprocessMovie>[0])
       );
