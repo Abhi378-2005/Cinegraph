@@ -11,6 +11,8 @@ const ROWS = [
 ];
 
 describe('getTopSimilar', () => {
+  beforeEach(() => mockQuery.mockReset());
+
   it('returns results ordered by rank', async () => {
     mockQuery.mockResolvedValue([ROWS]);
     const results = await getTopSimilar(1, 50);
@@ -27,7 +29,7 @@ describe('getTopSimilar', () => {
 
   it('respects the limit parameter', async () => {
     mockQuery.mockResolvedValue([ROWS]);
-    const results = await getTopSimilar(1, 1);
+    await getTopSimilar(1, 1);
     // limit is passed to BQ query, so BQ returns at most 1 row
     expect(mockQuery).toHaveBeenCalledWith(
       expect.objectContaining({ params: expect.objectContaining({ limit: 1 }) })
