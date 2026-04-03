@@ -26,6 +26,7 @@ export async function getBQMovie(id: number): Promise<Movie | null> {
   const [rows] = await bq.query({
     query: `SELECT * FROM \`${DS}.movies\` WHERE movie_id = @id LIMIT 1`,
     params: { id },
+    parameterMode: 'NAMED',
   });
   return rows.length > 0 ? rowToMovie(rows[0] as Record<string, unknown>) : null;
 }
@@ -35,6 +36,7 @@ export async function getBQMovieBatch(ids: number[]): Promise<Map<number, Movie>
   const [rows] = await bq.query({
     query: `SELECT * FROM \`${DS}.movies\` WHERE movie_id IN UNNEST(@ids)`,
     params: { ids },
+    parameterMode: 'NAMED',
   });
   const map = new Map<number, Movie>();
   for (const row of rows as Record<string, unknown>[]) {
@@ -55,6 +57,7 @@ export async function getBQPopular(genre: string, limit = 50): Promise<Movie[]> 
       LIMIT @limit
     `,
     params: { genre, limit },
+    parameterMode: 'NAMED',
   });
   return (rows as Record<string, unknown>[]).map(rowToMovie);
 }

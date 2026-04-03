@@ -62,6 +62,13 @@ describe('getBQMovieBatch', () => {
     const map = await getBQMovieBatch([1]);
     expect(map.get(1)).toEqual(EXPECTED_MOVIE);
   });
+
+  it('returns empty map for empty ids without querying BQ', async () => {
+    mockQuery.mockClear();
+    const map = await getBQMovieBatch([]);
+    expect(map.size).toBe(0);
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
 });
 
 describe('getBQPopular', () => {
