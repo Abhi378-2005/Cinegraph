@@ -1,5 +1,6 @@
 import { redis } from './client';
 import type { Movie } from '../types';
+import { getBQMovie, getBQPopular } from '../bigquery/movies';
 
 export async function setMovie(movie: Movie): Promise<void> {
   await Promise.all([
@@ -25,23 +26,32 @@ export async function setMovie(movie: Movie): Promise<void> {
 
 export async function getMovie(id: number): Promise<Movie | null> {
   const data = await redis.hgetall<Record<string, string>>(`movie:${id}`);
-  if (!data || !data.title) return null;
-  return {
-    id,
-    title: data.title,
-    overview: data.overview ?? '',
-    posterPath: data.posterPath ?? '',
-    backdropPath: data.backdropPath || undefined,
-    releaseYear: Number(data.releaseYear),
-    genres: JSON.parse(data.genres ?? '[]'),
-    cast: JSON.parse(data.cast ?? '[]'),
-    director: data.director ?? '',
-    keywords: JSON.parse(data.keywords ?? '[]'),
-    voteAverage: Number(data.voteAverage),
-    voteCount: Number(data.voteCount),
-    popularity: Number(data.popularity),
-    runtime: Number(data.runtime),
-  };
+  if (data && data.title) {
+    return {
+      id,
+      title: data.title,
+      overview: data.overview ?? '',
+      posterPath: data.posterPath ?? '',
+      backdropPath: data.backdropPath || undefined,
+      releaseYear: Number(data.releaseYear),
+      genres: JSON.parse(data.genres ?? '[]'),
+      cast: JSON.parse(data.cast ?? '[]'),
+      director: data.director ?? '',
+      keywords: JSON.parse(data.keywords ?? '[]'),
+      voteAverage: Number(data.voteAverage),
+      voteCount: Number(data.voteCount),
+      popularity: Number(data.popularity),
+      runtime: Number(data.runtime),
+    };
+  }
+
+  // BigQuery fallback on Redis miss
+  const movie = await getBQMovie(id);
+  if (!movie) return null;
+
+  // Populate Redis for future requests (TTL 24h)
+  await setMovie(movie);
+  return movie;
 }
 
 export async function getAllMovieIds(): Promise<number[]> {
@@ -52,7 +62,11 @@ export async function getAllMovieIds(): Promise<number[]> {
 export async function getPopularMovieIds(genre?: string, limit = 50): Promise<number[]> {
   const key = genre ? `popular:${genre}` : 'popular:all';
   const results = await redis.zrange(key, 0, limit - 1, { rev: true });
-  return results.map(Number);
+  if (results.length > 0) return results.map(Number);
+
+  // BigQuery fallback — Redis sorted set not populated yet
+  const movies = await getBQPopular(genre ?? '', limit);
+  return movies.map(m => m.id);
 }
 
 // KMP-based title search — implements KMP string matching algorithm from scratch
