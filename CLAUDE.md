@@ -107,11 +107,25 @@ FRONTEND_URL=http://localhost:3000
 
 ## Current State
 
-The **frontend** is a fresh Next.js scaffold (boilerplate `page.tsx` and `layout.tsx`). No CineGraph components have been built yet.
+The **frontend** is fully implemented:
+- All 4 pages: `/` (cold-start GenrePicker), `/discover` (feed + AlgoDrawer), `/movie/[id]` (hero + ratings), `/graph` (desktop-only SVG placeholder)
+- All shared components built and reviewed: Navbar, MovieCard, MovieRow, RatingStars, GenrePicker, EngineSelector, WatchBudget, AlgoDrawer, Toast
+- `lib/` layer complete: `types.ts`, `session.ts`, `formatters.ts`, `api.ts`, `socket.ts`
+- Mock fallback active: `public/mock/movies.json` (20 movies) used when backend is offline
+- Build passes cleanly: `npm run build` produces all 5 routes with zero TypeScript errors
 
 The **backend** directory does not yet exist — it needs to be scaffolded as a Node.js + Express + TypeScript project.
 
 The full component and page specifications, including exact TypeScript implementations for `lib/session.ts`, `lib/api.ts`, and `lib/socket.ts`, are in `agent/frontend_plan.md`.
+
+## Frontend Implementation Gotchas
+
+- **`'use client'` must be the absolute first line** — before any comments or file-path annotations. Next.js enforces this; putting it on line 2 causes a build error.
+- **All internal imports use `@/` alias** — never relative `./` paths for `lib/` or cross-component imports. `@/*` maps to `frontend/` root via `tsconfig.json`.
+- **No hardcoded hex colors in components** — always use CSS custom properties (`var(--color-brand)` etc.). The full token list is in `app/globals.css`.
+- **No hardcoded backend URLs** — fallback for `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_SOCKET_URL` must be `''`, not `'http://localhost:3001'`, to avoid silently pointing production traffic at dev.
+- **TMDB images** require `image.tmdb.org` in `next.config.ts` `remotePatterns`. The `next/image` component won't load external images without this.
+- **`hasExistingToken()`** must be called before `getOrCreateToken()` on the landing page to detect returning users. Calling `getOrCreateToken()` first always creates/returns a token, making the check useless.
 
 ## Hosting
 - Frontend → Vercel
