@@ -29,6 +29,7 @@ export async function getBQVectorBatch(movieIds: number[]): Promise<Map<number, 
 export async function getAllBQVectors(): Promise<Map<number, number[]>> {
   const [rows] = await bq.query({
     query: `SELECT movie_id, feature_vector FROM \`${DS}.movie_features\``,
+    parameterMode: 'NAMED',
   });
   const map = new Map<number, number[]>();
   for (const row of rows as Record<string, unknown>[]) {
