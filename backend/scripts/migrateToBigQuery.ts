@@ -59,7 +59,7 @@ async function main() {
     await upsertMovies(movies);
 
     // Step 4: Build feature vectors and upsert
-    const maxLogPop = Math.log(Math.max(...movies.map(m => m.popularity)) + 1);
+    const maxLogPop = Math.log(Math.max(...movies.map(m => m.popularity), 1) + 1);
     const idf = buildIDF(movies);
 
     const vectorEntries = movies.map(m => ({
