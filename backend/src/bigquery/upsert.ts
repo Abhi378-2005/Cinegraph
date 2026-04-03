@@ -1,4 +1,4 @@
-import { bq, dataset } from './client';
+import { bq } from './client';
 import { TABLE_NAMES } from './schema';
 import type { Movie } from '../types';
 
@@ -16,12 +16,12 @@ export async function upsertMovies(movies: Movie[]): Promise<void> {
   const rows = movies.map(m => ({
     movie_id:          m.id,
     title:             m.title,
-    original_title:    m.title,
+    original_title:    null,
     overview:          m.overview,
     poster_path:       m.posterPath,
     backdrop_path:     m.backdropPath ?? null,
     release_year:      m.releaseYear,
-    original_language: '',
+    original_language: null,
     popularity:        m.popularity,
     vote_average:      m.voteAverage,
     vote_count:        m.voteCount,
