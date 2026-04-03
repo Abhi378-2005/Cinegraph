@@ -7,13 +7,17 @@
     "build": "tsc",
     "start": "node dist/src/index.js",
     "seed": "ts-node-dev --transpile-only scripts/seedData.ts",
-    "test": "jest"
+    "test": "jest",
+    "migrate": "ts-node --transpile-only scripts/migrateToBigQuery.ts",
+    "migrate:resume": "ts-node --transpile-only scripts/migrateToBigQuery.ts --resume",
+    "migrate:similarity-only": "ts-node --transpile-only scripts/migrateToBigQuery.ts --similarity-only"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@google-cloud/bigquery": "^8.1.1",
     "@upstash/redis": "^1.36.3",
     "axios": "^1.13.6",
     "cors": "^2.8.6",
