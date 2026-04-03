@@ -49,15 +49,25 @@ Dataset: `cinegraph` (region: `us-central1`)
 | Column | Type | Notes |
 |---|---|---|
 | `movie_id` | INTEGER | FK → movies |
-| `genre_vector` | ARRAY\<FLOAT64\> | 28-dim one-hot (TMDB genres) |
-| `popularity_norm` | FLOAT64 | Min-max normalized 0–1 across corpus |
-| `vote_norm` | FLOAT64 | Min-max normalized 0–1 across corpus |
-| `decade` | INTEGER | e.g. 2020 |
-| `cast_ids` | ARRAY\<INTEGER\> | Top-5 TMDB person IDs |
-| `director_id` | INTEGER | TMDB person ID |
-| `keyword_ids` | ARRAY\<INTEGER\> | Top-20 TMDB keyword IDs |
+| `feature_vector` | ARRAY\<FLOAT64\> | Full 40-dim combined vector (see breakdown below) |
 | `feature_version` | INTEGER | Incremented on each re-run |
 | `updated_at` | TIMESTAMP | |
+
+**Vector layout (40 dims) — matches `src/ml/featureVector.ts` exactly:**
+
+| Dims | Content |
+|---|---|
+| [0–18] | Genre one-hot (19 TMDB genres) |
+| [19–23] | Top-5 cast names hashed to 0–1 floats |
+| [24] | Director name hashed to 0–1 float |
+| [25–34] | Top-10 keywords TF-IDF weighted |
+| [35] | `vote_average / 10` |
+| [36] | `log(popularity+1)` normalized |
+| [37] | Release decade normalized |
+| [38] | `runtime / 240` clamped |
+| [39] | Vote count tier (0.25/0.5/0.75/1.0) |
+
+The vector is built by the existing `buildFeatureVector()` function and stored as a single `REPEATED FLOAT64` column. The split-column design (genre_vector, cast_ids, etc.) was dropped — splitting would duplicate the encoding logic already in `featureVector.ts`.
 
 ### Table: `movie_similarity`
 
