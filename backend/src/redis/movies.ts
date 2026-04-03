@@ -49,7 +49,7 @@ export async function getMovie(id: number): Promise<Movie | null> {
   const movie = await getBQMovie(id);
   if (!movie) return null;
 
-  // Populate Redis for future requests (TTL 24h)
+  // Populate Redis for future requests
   await setMovie(movie);
   return movie;
 }
@@ -66,6 +66,12 @@ export async function getPopularMovieIds(genre?: string, limit = 50): Promise<nu
 
   // BigQuery fallback — Redis sorted set not populated yet
   const movies = await getBQPopular(genre ?? '', limit);
+
+  if (movies.length > 0) {
+    const [first, ...rest] = movies.map(m => ({ score: m.popularity, member: String(m.id) }));
+    await redis.zadd(key, first, ...rest);
+  }
+
   return movies.map(m => m.id);
 }
 
