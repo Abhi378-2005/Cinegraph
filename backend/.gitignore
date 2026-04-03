@@ -4,4 +4,5 @@ dist/
 .env.local
 
 # GCP service account key
-secrets/
+secrets/*
+!secrets/.gitkeep
