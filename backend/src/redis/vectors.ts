@@ -6,8 +6,8 @@ export async function setVector(movieId: number, vector: number[]): Promise<void
 }
 
 export async function getVector(movieId: number): Promise<number[] | null> {
-  const data = await redis.get<string>(`movie:vector:${movieId}`);
-  if (data) return JSON.parse(data) as number[];
+  const data = await redis.get<number[]>(`movie:vector:${movieId}`);
+  if (data) return data;
 
   // BigQuery fallback on Redis miss
   const vector = await getBQVector(movieId);

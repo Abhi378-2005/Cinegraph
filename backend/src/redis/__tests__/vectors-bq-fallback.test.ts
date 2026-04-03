@@ -18,7 +18,7 @@ describe('getVector with BigQuery fallback', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('returns cached Redis vector without calling BigQuery', async () => {
-    mockGet.mockResolvedValue(JSON.stringify(VECTOR));
+    mockGet.mockResolvedValue(VECTOR);
     const v = await getVector(1);
     expect(v).toEqual(VECTOR);
     expect(mockGetBQVector).not.toHaveBeenCalled();
@@ -41,5 +41,6 @@ describe('getVector with BigQuery fallback', () => {
     mockGet.mockResolvedValue(null);
     mockGetBQVector.mockResolvedValue(null);
     expect(await getVector(1)).toBeNull();
+    expect(mockSet).not.toHaveBeenCalled();
   });
 });
