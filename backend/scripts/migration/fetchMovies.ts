@@ -5,7 +5,8 @@ import { preprocessMovie } from '../../src/tmdb/preprocessor';
 import type { Movie } from '../../src/types';
 
 const PROXY_BASE = process.env.TMDB_PROXY_URL ?? 'https://proxy-gate-tanendra77.vercel.app/api/proxy';
-const API_KEY    = process.env.TMDB_API_KEY ?? 'b24394c1c9b929edc87f91bae9258318';
+const API_KEY    = process.env.TMDB_API_KEY;
+if (!API_KEY) throw new Error('TMDB_API_KEY environment variable is required');
 const DELAY_MS   = 300;
 const MAX_RETRIES = 3;
 
@@ -61,8 +62,9 @@ export async function fetchAllMovies(
   targetPages = 5000,
   resumeFrom = 0
 ): Promise<void> {
+  const resumeCheckpoint = resumeFrom > 0 ? loadCheckpoint() : null;
   let startPage = resumeFrom + 1;
-  let totalFetched = resumeFrom * 20;
+  let totalFetched = resumeCheckpoint?.totalFetched ?? 0;
 
   console.log(`Starting fetch from page ${startPage} (target: ${targetPages} pages)`);
 
