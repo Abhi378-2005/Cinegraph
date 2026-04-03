@@ -1,7 +1,7 @@
 import { getUserRatings, getPreferredGenres } from '../redis/ratings';
-import { getAllMovieIds, getMovie, getPopularMovieIds } from '../redis/movies';
+import { getPopularMovieIds, getMovie } from '../redis/movies';
 import { getVector } from '../redis/vectors';
-import { cosineSimilarity } from './cosineSimilarity';
+import { getTopSimilar } from '../bigquery/similarity';
 import type { Recommendation } from '../types';
 
 export async function contentBasedRecommend(
@@ -10,46 +10,38 @@ export async function contentBasedRecommend(
 ): Promise<Recommendation[]> {
   const ratings = await getUserRatings(userId);
   const ratedIds = Object.keys(ratings).map(Number);
-
   if (ratedIds.length === 0) return [];
 
-  // Build taste profile: weighted average of rated movie vectors (weight = rating/5)
-  const profile = new Array<number>(40).fill(0);
-  let totalWeight = 0;
-  for (const id of ratedIds) {
-    const vec = await getVector(id);
-    if (!vec) continue;
-    const w = ratings[id] / 5;
-    for (let i = 0; i < vec.length; i++) profile[i] += vec[i] * w;
-    totalWeight += w;
-  }
-  if (totalWeight === 0) return [];
-  for (let i = 0; i < profile.length; i++) profile[i] /= totalWeight;
-
-  // Score all unrated movies
-  const allIds = await getAllMovieIds();
   const ratedSet = new Set(ratedIds);
-  const scored: { id: number; sim: number }[] = [];
 
-  for (const id of allIds) {
-    if (ratedSet.has(id)) continue;
-    const vec = await getVector(id);
-    if (!vec) continue;
-    scored.push({ id, sim: cosineSimilarity(profile, vec) });
+  // For each rated movie, get its pre-computed top-50 similar movies from BigQuery
+  const candidateScores = new Map<number, number>();
+
+  for (const ratedId of ratedIds) {
+    const weight = ratings[ratedId] / 5;
+    const similar = await getTopSimilar(ratedId, 50);
+    for (const entry of similar) {
+      if (ratedSet.has(entry.similarMovieId)) continue;
+      const prev = candidateScores.get(entry.similarMovieId) ?? 0;
+      candidateScores.set(entry.similarMovieId, prev + entry.score * weight);
+    }
   }
 
-  scored.sort((a, b) => b.sim - a.sim);
-  const top = scored.slice(0, topN);
+  // Sort candidates by blended score
+  const sorted = Array.from(candidateScores.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, topN);
 
   const results: Recommendation[] = [];
-  for (const { id, sim } of top) {
+  for (const [id, blendedScore] of sorted) {
     const movie = await getMovie(id);
     if (!movie) continue;
+    const normalised = Math.min(1, blendedScore / ratedIds.length);
     results.push({
       movie,
-      score: sim * 5,
-      matchPercent: Math.round(sim * 100),
-      reason: `Similar to movies you've rated highly`,
+      score: normalised * 5,
+      matchPercent: Math.round(normalised * 100),
+      reason: 'Similar to movies you\'ve rated highly',
       engine: 'content',
       similarMovies: ratedIds.slice(0, 3),
     });
