@@ -149,7 +149,8 @@ function MergeSortPanel({
   replaySpeedMs,
   onSpeedChange,
 }: MergeSortPanelProps) {
-  if (!currentStep) {
+  // Show placeholder only when no steps have arrived yet
+  if (!currentStep && totalSteps === 0) {
     return (
       <div className="p-4">
         <p className="text-sm font-semibold mb-2" style={{ color: 'var(--color-brand)' }}>
@@ -163,7 +164,7 @@ function MergeSortPanel({
     );
   }
 
-  const items = currentStep.array;
+  const items = currentStep?.array ?? [];
 
   return (
     <div className="p-4 flex flex-col gap-3">
@@ -173,6 +174,11 @@ function MergeSortPanel({
 
       {/* Animated card row */}
       <div className="overflow-x-auto">
+        {items.length === 0 ? (
+          <p className="text-xs py-2" style={{ color: 'var(--color-text-muted)' }}>
+            {totalSteps} steps ready — press ▶ Play to start
+          </p>
+        ) : (
         <motion.div
           layout
           className="flex gap-2 pb-1"
@@ -180,10 +186,10 @@ function MergeSortPanel({
         >
           {items.map((rec, idx) => {
             const isCompare =
-              currentStep.type === 'compare' &&
+              currentStep?.type === 'compare' &&
               (idx === currentStep.leftIndex || idx === currentStep.rightIndex);
             const isMerge =
-              currentStep.type === 'merge' &&
+              currentStep?.type === 'merge' &&
               idx >= currentStep.leftIndex &&
               idx <= currentStep.rightIndex;
             return (
@@ -195,19 +201,22 @@ function MergeSortPanel({
             );
           })}
         </motion.div>
+        )}
       </div>
 
       {/* Step description */}
-      <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-        {currentStep.type === 'compare' &&
-          `Comparing positions ${currentStep.leftIndex} and ${currentStep.rightIndex}`}
-        {currentStep.type === 'place' &&
-          `Placing item at position ${currentStep.leftIndex}`}
-        {currentStep.type === 'split' &&
-          `Splitting subarray [${currentStep.leftIndex}…${currentStep.rightIndex}]`}
-        {currentStep.type === 'merge' &&
-          `Merging into positions [${currentStep.leftIndex}…${currentStep.rightIndex}]`}
-      </p>
+      {currentStep && (
+        <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+          {currentStep.type === 'compare' &&
+            `Comparing positions ${currentStep.leftIndex} and ${currentStep.rightIndex}`}
+          {currentStep.type === 'place' &&
+            `Placing item at position ${currentStep.leftIndex}`}
+          {currentStep.type === 'split' &&
+            `Splitting subarray [${currentStep.leftIndex}…${currentStep.rightIndex}]`}
+          {currentStep.type === 'merge' &&
+            `Merging into positions [${currentStep.leftIndex}…${currentStep.rightIndex}]`}
+        </p>
+      )}
 
       {/* Footer */}
       <div
