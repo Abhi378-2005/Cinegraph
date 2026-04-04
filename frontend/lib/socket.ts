@@ -56,6 +56,7 @@ export const socketEvents = {
   onAlgoStep:         (cb: (d: AlgoStepEvent) => void): Unsubscribe       => safeOn('algo:step', cb),
   onAlgoComplete:     (cb: (d: AlgoCompleteEvent) => void): Unsubscribe   => safeOn('algo:complete', cb),
   onRecommendReady:   (cb: (d: RecommendReadyEvent) => void): Unsubscribe => safeOn('recommend:ready', cb),
+  onRecommendError:   (cb: (d: { message: string }) => void): Unsubscribe => safeOn('recommend:error', cb),
   onCommunityUpdate:  (cb: (d: CommunityUpdateEvent) => void): Unsubscribe=> safeOn('community:update', cb),
   emitRecommendStart: (engine: string, budget?: number) => safeEmit('recommend:start', { engine, budget }),
   emitTastePathFind:  (src: string, tgt: string)        => safeEmit('tastepath:find', { sourceUserId: src, targetUserId: tgt }),

@@ -1,23 +1,32 @@
 import { redis } from './client';
 import type { Movie } from '../types';
 import { getBQMovie, getBQPopular } from '../bigquery/movies';
+import { log, timer } from '../logger';
+
+// Handles both JSON-encoded arrays (new: '["a","b"]') and raw comma strings (old: 'a,b')
+function parseStringArray(value: string | undefined): string[] {
+  if (!value) return [];
+  if (Array.isArray(value)) return value as string[];   // Upstash auto-deserialized
+  try { return JSON.parse(value); }
+  catch { return value.split(',').map(s => s.trim()).filter(Boolean); }
+}
 
 export async function setMovie(movie: Movie): Promise<void> {
   await Promise.all([
     redis.hset(`movie:${movie.id}`, {
-      title: movie.title,
-      overview: movie.overview,
-      posterPath: movie.posterPath,
+      title:        movie.title,
+      overview:     movie.overview,
+      posterPath:   movie.posterPath,
       backdropPath: movie.backdropPath ?? '',
-      releaseYear: String(movie.releaseYear),
-      genres: JSON.stringify(movie.genres),
-      cast: JSON.stringify(movie.cast),
-      director: movie.director,
-      keywords: JSON.stringify(movie.keywords),
-      voteAverage: String(movie.voteAverage),
-      voteCount: String(movie.voteCount),
-      popularity: String(movie.popularity),
-      runtime: String(movie.runtime),
+      releaseYear:  String(movie.releaseYear),
+      genres:       JSON.stringify(movie.genres),
+      cast:         JSON.stringify(movie.cast),
+      director:     movie.director,
+      keywords:     JSON.stringify(movie.keywords),
+      voteAverage:  String(movie.voteAverage),
+      voteCount:    String(movie.voteCount),
+      popularity:   String(movie.popularity),
+      runtime:      String(movie.runtime),
     }),
     redis.sadd('movies:all', String(movie.id)),
     redis.hset('movies:titles', { [String(movie.id)]: movie.title }),
@@ -25,57 +34,70 @@ export async function setMovie(movie: Movie): Promise<void> {
 }
 
 export async function getMovie(id: number): Promise<Movie | null> {
+  const elapsed = timer();
   const data = await redis.hgetall<Record<string, string>>(`movie:${id}`);
   if (data && data.title) {
+    log.redis(`HIT  movie:${id} "${data.title}"  (${elapsed()})`);
     return {
       id,
-      title: data.title,
-      overview: data.overview ?? '',
-      posterPath: data.posterPath ?? '',
+      title:        data.title,
+      overview:     data.overview ?? '',
+      posterPath:   data.posterPath ?? '',
       backdropPath: data.backdropPath || undefined,
-      releaseYear: Number(data.releaseYear),
-      genres: JSON.parse(data.genres ?? '[]'),
-      cast: JSON.parse(data.cast ?? '[]'),
-      director: data.director ?? '',
-      keywords: JSON.parse(data.keywords ?? '[]'),
-      voteAverage: Number(data.voteAverage),
-      voteCount: Number(data.voteCount),
-      popularity: Number(data.popularity),
-      runtime: Number(data.runtime),
+      releaseYear:  Number(data.releaseYear),
+      genres:       parseStringArray(data.genres),
+      cast:         parseStringArray(data.cast),
+      director:     data.director ?? '',
+      keywords:     parseStringArray(data.keywords),
+      voteAverage:  Number(data.voteAverage),
+      voteCount:    Number(data.voteCount),
+      popularity:   Number(data.popularity),
+      runtime:      Number(data.runtime),
     };
   }
 
-  // BigQuery fallback on Redis miss
+  log.redis(`MISS movie:${id} → falling back to BigQuery`);
+  const bqElapsed = timer();
   const movie = await getBQMovie(id);
-  if (!movie) return null;
-
-  // Populate Redis for future requests
+  if (!movie) {
+    log.redis(`MISS movie:${id} not found in BigQuery either  (${bqElapsed()})`);
+    return null;
+  }
+  log.redis(`BQ   movie:${id} "${movie.title}" fetched in ${bqElapsed()} → caching in Redis`);
   await setMovie(movie);
   return movie;
 }
 
 export async function getAllMovieIds(): Promise<number[]> {
   const ids = await redis.smembers('movies:all');
+  log.redis(`getAllMovieIds → ${ids.length} ids`);
   return ids.map(Number);
 }
 
 export async function getPopularMovieIds(genre?: string, limit = 50): Promise<number[]> {
   const key = genre ? `popular:${genre}` : 'popular:all';
+  const elapsed = timer();
   const results = await redis.zrange(key, 0, limit - 1, { rev: true });
-  if (results.length > 0) return results.map(Number);
+  if (results.length > 0) {
+    log.redis(`HIT  ${key} → ${results.length} ids  (${elapsed()})`);
+    return results.map(Number);
+  }
 
-  // BigQuery fallback — Redis sorted set not populated yet
+  log.redis(`MISS ${key} → falling back to BigQuery`);
+  const bqElapsed = timer();
   const movies = await getBQPopular(genre ?? '', limit);
+  log.redis(`BQ   getBQPopular(${genre || 'all'}, ${limit}) → ${movies.length} movies  (${bqElapsed()})`);
 
   if (movies.length > 0) {
-    const [first, ...rest] = movies.map(m => ({ score: m.popularity, member: String(m.id) }));
+    const [first, ...rest] = movies.map(m => ({ score: m.voteAverage * 0.7 + m.popularity / 1000.0 * 0.3, member: String(m.id) }));
     await redis.zadd(key, first, ...rest);
+    log.redis(`cached ${movies.length} ids → ${key}`);
   }
 
   return movies.map(m => m.id);
 }
 
-// KMP-based title search — implements KMP string matching algorithm from scratch
+// KMP-based title search
 function buildLPS(pattern: string): number[] {
   const lps = new Array<number>(pattern.length).fill(0);
   let len = 0, i = 1;
@@ -102,19 +124,21 @@ function kmpSearch(text: string, pattern: string): boolean {
 }
 
 export async function searchMovies(query: string, limit = 20): Promise<Movie[]> {
-  // One Redis call to get all titles
+  const elapsed = timer();
   const titles = await redis.hgetall<Record<string, string>>('movies:titles');
-  if (!titles) return [];
+  if (!titles) {
+    log.redis(`searchMovies("${query}") → movies:titles is empty`);
+    return [];
+  }
 
   const q = query.toLowerCase();
   const matchingIds: number[] = [];
-
   for (const [id, title] of Object.entries(titles)) {
     if (matchingIds.length >= limit) break;
     if (kmpSearch(title.toLowerCase(), q)) matchingIds.push(Number(id));
   }
 
-  // Only fetch full movie objects for matches
+  log.redis(`searchMovies("${query}") → ${matchingIds.length} matches from ${Object.keys(titles).length} titles  (${elapsed()})`);
   const movies = await Promise.all(matchingIds.map(id => getMovie(id)));
   return movies.filter((m): m is Movie => m !== null);
 }

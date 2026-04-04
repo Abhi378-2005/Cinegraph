@@ -7,10 +7,15 @@
     "build": "tsc",
     "start": "node dist/src/index.js",
     "seed": "ts-node-dev --transpile-only scripts/seedData.ts",
+    "seed:bq": "ts-node --transpile-only scripts/seedFromBQ.ts",
     "test": "jest",
     "migrate": "ts-node --transpile-only scripts/migrateToBigQuery.ts",
     "migrate:resume": "ts-node --transpile-only scripts/migrateToBigQuery.ts --resume",
-    "migrate:similarity-only": "ts-node --transpile-only scripts/migrateToBigQuery.ts --similarity-only"
+    "migrate:similarity-only": "ts-node --transpile-only scripts/migrateToBigQuery.ts --similarity-only",
+    "migrate:enrich-only": "ts-node --transpile-only scripts/migration/enrichMovies.ts",
+    "migrate:clear-bq": "ts-node --transpile-only scripts/clearBQTables.ts",
+    "migrate:dedup": "ts-node --transpile-only scripts/deduplicateBQ.ts",
+    "migrate:validate": "ts-node --transpile-only scripts/validateMigration.ts"
   },
   "keywords": [],
   "author": "",

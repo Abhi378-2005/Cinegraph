@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { setRating, computeAndSetPhase, getRatingCount } from '../redis/ratings';
+import { log } from '../logger';
 
 export const rateRouter = Router();
 
@@ -20,9 +21,11 @@ rateRouter.post('/', async (req, res) => {
 
   try {
     const { movieId, rating } = parsed.data;
-    await setRating(userId, movieId, Math.round(rating));
+    log.rate(`user=${userId.slice(0, 12)}  movie=${movieId}  rating=${rating}`);
+    await setRating(userId, movieId, rating);
     const newPhase = await computeAndSetPhase(userId);
     const ratingsCount = await getRatingCount(userId);
+    log.rate(`→ phase=${newPhase}  totalRatings=${ratingsCount}`);
     res.json({ success: true, newPhase, ratingsCount });
   } catch (err) {
     console.error('Rate error:', err);

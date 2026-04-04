@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { tmdbClient } from '../../src/tmdb/client';
 import { preprocessMovie } from '../../src/tmdb/preprocessor';
+import { logger } from './logger';
 import type { Movie } from '../../src/types';
 
 const DELAY_MS   = 300;
@@ -13,8 +14,8 @@ export interface Checkpoint {
   totalPages: number;
 }
 
-const CHECKPOINT_PATH = path.join(process.cwd(), 'data', 'migration', 'checkpoint.json');
-const JSONL_PATH      = path.join(process.cwd(), 'data', 'migration', 'movies_raw.jsonl');
+export const CHECKPOINT_PATH = path.join(process.cwd(), 'data', 'migration', 'checkpoint.json');
+export const JSONL_PATH      = path.join(process.cwd(), 'data', 'migration', 'movies_raw.jsonl');
 
 export function loadCheckpoint(): Checkpoint | null {
   if (!fs.existsSync(CHECKPOINT_PATH)) return null;
@@ -45,7 +46,7 @@ async function fetchPage(page: number): Promise<{ movies: Movie[]; totalPages: n
     } catch (err) {
       if (attempt === MAX_RETRIES) throw err;
       const backoff = attempt * 1000;
-      console.warn(`Page ${page} attempt ${attempt} failed, retrying in ${backoff}ms...`);
+      logger.warn(`Page ${page} attempt ${attempt} failed, retrying in ${backoff}ms...`);
       await delay(backoff);
     }
   }
@@ -60,7 +61,7 @@ export async function fetchAllMovies(
   let startPage = resumeFrom + 1;
   let totalFetched = resumeCheckpoint?.totalFetched ?? 0;
 
-  console.log(`Starting fetch from page ${startPage} (target: ${targetPages} pages)`);
+  logger.info(`Starting fetch from page ${startPage} (target: ${targetPages} pages)`);
 
   for (let page = startPage; page <= targetPages; page++) {
     const { movies, totalPages } = await fetchPage(page);
@@ -70,18 +71,18 @@ export async function fetchAllMovies(
     saveCheckpoint({ lastPage: page, totalFetched, totalPages });
 
     if (page % 50 === 0) {
-      console.log(`Progress: page ${page}/${Math.min(targetPages, totalPages)} — ${totalFetched} movies`);
+      logger.info(`Fetch progress: page ${page}/${Math.min(targetPages, totalPages)} — ${totalFetched} movies`);
     }
 
     await delay(DELAY_MS);
 
     if (page >= totalPages) {
-      console.log(`Reached last available page (${totalPages}). Done.`);
+      logger.info(`Reached last available TMDB page (${totalPages}). Done.`);
       break;
     }
   }
 
-  console.log(`Fetch complete. Total movies: ${totalFetched}`);
+  logger.info(`Fetch complete. Total movies fetched: ${totalFetched}`);
 }
 
 export function loadMoviesFromJsonl(): Movie[] {

@@ -5,6 +5,7 @@ import { getRecommendations } from '../ml/hybrid';
 import { mergeSort } from '../algorithms/mergeSort';
 import { knapsack } from '../algorithms/knapsack';
 import { setPreferredGenres } from '../redis/ratings';
+import { log, timer } from '../logger';
 
 // Emitter function — set by socketServer after initialization
 export let emitToUser: ((userId: string, event: string, data: unknown) => void) | null = null;
@@ -20,7 +21,6 @@ const recommendSchema = z.object({
 });
 
 // POST /recommend — fires async job, returns { sessionId } immediately
-// Async job streams algo steps via socket, then emits recommend:ready
 recommendRouter.post('/', async (req, res) => {
   const userId = req.headers['x-session-token'] as string;
   if (!userId) return res.status(401).json({ error: 'Missing X-Session-Token' });
@@ -31,20 +31,25 @@ recommendRouter.post('/', async (req, res) => {
   const { engine, budget, genres } = parsed.data;
   const sessionId = randomUUID();
 
+  log.recommend(`START  user=${userId.slice(0, 12)}  engine=${engine}  budget=${budget ?? 'none'}  genres=[${(genres ?? []).join(', ')}]`);
+
   if (genres && genres.length > 0) {
     await setPreferredGenres(userId, genres);
   }
 
-  // Return sessionId immediately — background job streams the results
   res.json({ sessionId });
 
-  // Fire-and-forget background job
   (async () => {
+    const elapsed = timer();
     try {
+      log.recommend(`running getRecommendations  user=${userId.slice(0, 12)}  engine=${engine}`);
       const recs = await getRecommendations(userId, engine);
-      const { sorted, steps: sortSteps } = mergeSort(recs);
+      log.recommend(`got ${recs.length} recs  (${elapsed()})  — running mergeSort`);
 
-      // Stream merge sort steps at ~60fps cap
+      const sortStart = timer();
+      const { sorted, steps: sortSteps } = mergeSort(recs);
+      log.recommend(`mergeSort done  steps=${sortSteps.length}  (${sortStart()})`);
+
       for (const step of sortSteps) {
         emitToUser?.(userId, 'algo:step', { algorithm: 'mergeSort', step });
         await new Promise(r => setTimeout(r, 16));
@@ -53,9 +58,11 @@ recommendRouter.post('/', async (req, res) => {
 
       let finalRecs = sorted;
 
-      // If budget provided, run knapsack and stream those steps too
       if (budget !== undefined) {
+        log.recommend(`running knapsack  budget=${budget}  items=${sorted.length}`);
+        const kStart = timer();
         const { selected, steps: kSteps } = knapsack(sorted, budget);
+        log.recommend(`knapsack done  selected=${selected.length}  steps=${kSteps.length}  (${kStart()})`);
         for (const step of kSteps) {
           emitToUser?.(userId, 'algo:step', { algorithm: 'knapsack', step });
           await new Promise(r => setTimeout(r, 16));
@@ -64,8 +71,14 @@ recommendRouter.post('/', async (req, res) => {
         finalRecs = selected;
       }
 
+      log.recommend(`DONE  user=${userId.slice(0, 12)}  finalRecs=${finalRecs.length}  total=${elapsed()}  — emitting recommend:ready`);
       emitToUser?.(userId, 'recommend:ready', { recommendations: finalRecs, engine });
+
+      if (!emitToUser) {
+        log.recommend(`WARN no emitter set — recommend:ready was not delivered`);
+      }
     } catch (err) {
+      log.recommend(`ERROR  user=${userId.slice(0, 12)}  ${err instanceof Error ? err.message : String(err)}`);
       console.error('Recommendation job failed:', err);
       emitToUser?.(userId, 'recommend:error', { message: 'Recommendation job failed' });
     }

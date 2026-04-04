@@ -8,6 +8,7 @@ import { rateRouter } from './routes/rate';
 import { recommendRouter } from './routes/recommend';
 import { similarityRouter } from './routes/similarity';
 import { initSocketServer } from './socket/socketServer';
+import { log, timer } from './logger';
 
 export const app = express();
 export const httpServer = createServer(app);
@@ -15,9 +16,19 @@ export const httpServer = createServer(app);
 app.use(cors({ origin: process.env.FRONTEND_URL ?? 'http://localhost:3000', credentials: true }));
 app.use(express.json());
 
+// Request/response logging
+app.use((req, _res, next) => {
+  const elapsed = timer();
+  _res.on('finish', () => {
+    log.http(`${req.method} ${req.path} → ${_res.statusCode}  (${elapsed()})`);
+  });
+  next();
+});
+
 app.get('/health', async (_req, res) => {
   let redisOk = false;
   try { await redis.ping(); redisOk = true; } catch { /* offline */ }
+  log.http(`health  redis=${redisOk}  uptime=${process.uptime().toFixed(1)}s`);
   res.json({ status: 'ok', redis: redisOk, uptime: process.uptime() });
 });
 

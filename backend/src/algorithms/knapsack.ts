@@ -36,7 +36,7 @@ export function knapsack(
     new Array<number>(budget + 1).fill(0)
   );
 
-  // Fill DP table
+  // Fill DP table — record ONE step per item row (not per cell)
   for (let i = 1; i <= n; i++) {
     const w_i = weights[i - 1];
     const v_i = values[i - 1];
@@ -51,15 +51,15 @@ export function knapsack(
         // Item is too heavy — must exclude
         dp[i][w] = dp[i - 1][w];
       }
-
-      steps.push({
-        row:      i,
-        col:      w,
-        value:    dp[i][w],
-        decision: dp[i][w] !== dp[i - 1][w] ? 'include' : 'exclude',
-        // dpSnapshot omitted on fill steps (too large)
-      });
     }
+
+    // One step per item row (at full-budget column) — keeps step count at O(n)
+    steps.push({
+      row:      i,
+      col:      budget,
+      value:    dp[i][budget],
+      decision: dp[i][budget] !== dp[i - 1][budget] ? 'include' : 'exclude',
+    });
   }
 
   // Backtrack to identify which movies were selected

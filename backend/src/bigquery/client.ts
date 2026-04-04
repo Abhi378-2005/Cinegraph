@@ -31,3 +31,22 @@ export async function ensureTables(): Promise<void> {
     }
   }
 }
+
+/**
+ * Truncates movies, movie_features, and movie_similarity tables.
+ * Run before a full re-migration to prevent duplicate rows.
+ * Does NOT touch user_ratings.
+ */
+export async function clearMigrationTables(): Promise<void> {
+  const tables = [TABLE_NAMES.movies, TABLE_NAMES.features, TABLE_NAMES.similarity];
+  for (const name of tables) {
+    const table = dataset.table(name);
+    const [exists] = await table.exists();
+    if (exists) {
+      await table.delete();
+      console.log(`Dropped table: ${name}`);
+    }
+  }
+  // Recreate empty tables with correct schema
+  await ensureTables();
+}
