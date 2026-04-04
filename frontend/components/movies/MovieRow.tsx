@@ -2,6 +2,7 @@
 // frontend/components/movies/MovieRow.tsx
 
 import { useRef, useState } from 'react';
+import type React from 'react';
 import { ChevronLeftIcon, ChevronRightIcon } from '@/components/movies/ChevronIcons';
 import { MovieCard } from './MovieCard';
 import type { Movie } from '@/lib/types';
@@ -10,9 +11,10 @@ interface MovieRowProps {
   title: string;
   movies: Movie[];
   matchPercents?: Record<number, number>;
+  titleExtras?: React.ReactNode;
 }
 
-export function MovieRow({ title, movies, matchPercents }: MovieRowProps) {
+export function MovieRow({ title, movies, matchPercents, titleExtras }: MovieRowProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showLeft, setShowLeft] = useState(false);
   const [showRight, setShowRight] = useState(true);
@@ -38,12 +40,15 @@ export function MovieRow({ title, movies, matchPercents }: MovieRowProps) {
       onMouseLeave={() => setHoveringRow(false)}
     >
       {/* Row title */}
-      <h2
-        className="text-lg font-semibold mb-3 px-8"
-        style={{ color: 'var(--color-text-primary)' }}
-      >
-        {title}
-      </h2>
+      <div className="flex items-center gap-3 px-8 mb-3">
+        <h2
+          className="text-lg font-semibold"
+          style={{ color: 'var(--color-text-primary)' }}
+        >
+          {title}
+        </h2>
+        {titleExtras}
+      </div>
 
       {/* Left chevron */}
       {hoveringRow && showLeft && (
