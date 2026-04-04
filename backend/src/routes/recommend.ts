@@ -51,10 +51,10 @@ recommendRouter.post('/', async (req, res) => {
       log.recommend(`mergeSort done  steps=${sortSteps.length}  (${sortStart()})`);
 
       for (const step of sortSteps) {
-        emitToUser?.(userId, 'algo:step', { algorithm: 'mergeSort', step });
+        emitToUser?.(userId, 'algo:step', { sessionId, algorithm: 'mergeSort', step });
         await new Promise(r => setTimeout(r, 16));
       }
-      emitToUser?.(userId, 'algo:complete', { algorithm: 'mergeSort', durationMs: 0, totalSteps: sortSteps.length });
+      emitToUser?.(userId, 'algo:complete', { sessionId, algorithm: 'mergeSort', durationMs: 0, totalSteps: sortSteps.length });
 
       let finalRecs = sorted;
 
@@ -64,15 +64,15 @@ recommendRouter.post('/', async (req, res) => {
         const { selected, steps: kSteps } = knapsack(sorted, budget);
         log.recommend(`knapsack done  selected=${selected.length}  steps=${kSteps.length}  (${kStart()})`);
         for (const step of kSteps) {
-          emitToUser?.(userId, 'algo:step', { algorithm: 'knapsack', step });
+          emitToUser?.(userId, 'algo:step', { sessionId, algorithm: 'knapsack', step });
           await new Promise(r => setTimeout(r, 16));
         }
-        emitToUser?.(userId, 'algo:complete', { algorithm: 'knapsack', durationMs: 0, totalSteps: kSteps.length });
+        emitToUser?.(userId, 'algo:complete', { sessionId, algorithm: 'knapsack', durationMs: 0, totalSteps: kSteps.length });
         finalRecs = selected;
       }
 
       log.recommend(`DONE  user=${userId.slice(0, 12)}  finalRecs=${finalRecs.length}  total=${elapsed()}  — emitting recommend:ready`);
-      emitToUser?.(userId, 'recommend:ready', { recommendations: finalRecs, engine });
+      emitToUser?.(userId, 'recommend:ready', { sessionId, recommendations: finalRecs, engine });
 
       if (!emitToUser) {
         log.recommend(`WARN no emitter set — recommend:ready was not delivered`);
