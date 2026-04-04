@@ -78,9 +78,9 @@ function SortCard({
           scale: cardState === 'compare' ? 1.1 : 1,
           boxShadow:
             cardState === 'compare'
-              ? '0 0 10px rgba(124,58,237,0.8)'
+              ? 'var(--shadow-compare)'
               : cardState === 'merge'
-              ? '0 0 8px rgba(74,222,128,0.6)'
+              ? 'var(--shadow-merge)'
               : 'none',
         }}
         transition={{ duration: 0.12 }}
@@ -379,7 +379,7 @@ function KnapsackPanel({
                     style={{
                       width: '14px',
                       fontSize: '10px',
-                      color: step.decision === 'include' ? 'var(--color-match)' : '#444',
+                      color: step.decision === 'include' ? 'var(--color-brand)' : 'var(--color-text-muted)',
                     }}
                   >
                     {step.decision === 'include' ? '✓' : '·'}
@@ -423,9 +423,7 @@ function KnapsackPanel({
                         width: '44px',
                         height: '64px',
                         border: included ? `2px solid var(--color-match)` : '1px solid var(--color-card-border)',
-                        boxShadow: included
-                          ? '0 0 8px rgba(74,222,128,0.5)'
-                          : 'none',
+                        boxShadow: included ? 'var(--shadow-include)' : 'none',
                         backgroundColor: 'var(--color-bg-card)',
                       }}
                     >

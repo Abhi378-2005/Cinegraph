@@ -49,6 +49,11 @@
   --viz-ks-bg:            #1a1a2e;
   --viz-ks-low:           #2d1b69;
   --color-exclude:        #ef4444;
+
+  /* Component shadows */
+  --shadow-compare:       0 0 10px rgba(124,58,237,0.8);
+  --shadow-merge:         0 0 8px rgba(74,222,128,0.6);
+  --shadow-include:       0 0 8px rgba(74,222,128,0.5);
 }
 
 * {
