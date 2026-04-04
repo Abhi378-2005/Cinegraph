@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { socketEvents } from '@/lib/socket';
+import { posterUrl } from '@/lib/formatters';
 import type {
   AlgoStepEvent,
   AlgoCompleteEvent,
@@ -16,11 +17,6 @@ import type {
 // ─── Shared types ─────────────────────────────────────────────────────────────
 
 type DrawerTab = 'mergesort' | 'knapsack' | 'overview';
-
-interface ReplayItem {
-  type: 'mergesort' | 'knapsack';
-  step: MergeSortStep | KnapsackStep;
-}
 
 // ─── Speed controls (shared by both panels) ───────────────────────────────────
 
@@ -50,10 +46,6 @@ function SpeedControls({
     </div>
   );
 }
-
-// ─── Poster helper ────────────────────────────────────────────────────────────
-
-const POSTER_BASE = process.env.NEXT_PUBLIC_TMDB_IMAGE_BASE ?? '';
 
 // ─── SortCard ────────────────────────────────────────────────────────────────
 
@@ -100,7 +92,7 @@ function SortCard({
         {rec.movie.posterPath && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={`${POSTER_BASE}${rec.movie.posterPath}`}
+            src={posterUrl(rec.movie.posterPath)}
             alt={rec.movie.title}
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />
@@ -136,22 +128,24 @@ function SortCard({
 
 interface MergeSortPanelProps {
   currentStep: MergeSortStep | null;
-  replayIndex: number;
+  msIndex: number;
   totalSteps: number;
-  replayDone: boolean;
-  isReplaying: boolean;
-  onReplay: () => void;
+  msPlaying: boolean;
+  msDone: boolean;
+  onPlay: () => void;
+  onPause: () => void;
   replaySpeedMs: number;
   onSpeedChange: (ms: number) => void;
 }
 
 function MergeSortPanel({
   currentStep,
-  replayIndex,
+  msIndex,
   totalSteps,
-  replayDone,
-  isReplaying,
-  onReplay,
+  msPlaying,
+  msDone,
+  onPlay,
+  onPause,
   replaySpeedMs,
   onSpeedChange,
 }: MergeSortPanelProps) {
@@ -221,27 +215,31 @@ function MergeSortPanel({
         style={{ color: 'var(--color-text-muted)' }}
       >
         <span className="tabular-nums">
-          step {replayIndex} / {totalSteps}
+          step {msIndex} / {totalSteps}
         </span>
-        <span
-          style={{ color: replayDone ? 'var(--color-match)' : 'var(--color-brand)' }}
-        >
-          {replayDone ? 'Complete ✓' : isReplaying ? 'Sorting…' : ''}
+        <span style={{ color: msDone ? 'var(--color-match)' : 'var(--color-brand)' }}>
+          {msDone ? 'Complete ✓' : msPlaying ? 'Sorting…' : msIndex > 0 ? 'Paused' : ''}
         </span>
         <div className="ml-auto flex items-center gap-2">
-          {replayDone && (
+          {msPlaying ? (
             <button
-              onClick={onReplay}
+              onClick={onPause}
               className="px-2 py-0.5 rounded text-xs"
               style={{ backgroundColor: 'var(--color-brand)', color: 'white' }}
             >
-              ▶ Replay
+              ⏸ Pause
+            </button>
+          ) : (
+            <button
+              onClick={onPlay}
+              disabled={totalSteps === 0}
+              className="px-2 py-0.5 rounded text-xs disabled:opacity-40"
+              style={{ backgroundColor: 'var(--color-brand)', color: 'white' }}
+            >
+              {msDone ? '▶ Replay' : msIndex > 0 ? '▶ Resume' : '▶ Play'}
             </button>
           )}
-          <SpeedControls
-            replaySpeedMs={replaySpeedMs}
-            onSpeedChange={onSpeedChange}
-          />
+          <SpeedControls replaySpeedMs={replaySpeedMs} onSpeedChange={onSpeedChange} />
         </div>
       </div>
     </div>
@@ -254,10 +252,11 @@ interface KnapsackPanelProps {
   currentStep: KnapsackStep | null;
   knapsackSteps: KnapsackStep[];
   recommendations: Recommendation[];
-  knapsackReplayIndex: number;
-  replayDone: boolean;
-  isReplaying: boolean;
-  onReplay: () => void;
+  ksIndex: number;
+  ksPlaying: boolean;
+  ksDone: boolean;
+  onPlay: () => void;
+  onPause: () => void;
   replaySpeedMs: number;
   onSpeedChange: (ms: number) => void;
 }
@@ -266,10 +265,11 @@ function KnapsackPanel({
   currentStep,
   knapsackSteps,
   recommendations,
-  knapsackReplayIndex,
-  replayDone,
-  isReplaying,
-  onReplay,
+  ksIndex,
+  ksPlaying,
+  ksDone,
+  onPlay,
+  onPause,
   replaySpeedMs,
   onSpeedChange,
 }: KnapsackPanelProps) {
@@ -279,8 +279,8 @@ function KnapsackPanel({
   // Backtrack steps: indices n..end (descending row, resolves selection)
   const backtrackSteps = knapsackSteps.slice(n);
 
-  const isPhase2       = knapsackReplayIndex >= n;
-  const backtrackShown = Math.max(0, knapsackReplayIndex - n);
+  const isPhase2       = ksIndex >= n;
+  const backtrackShown = Math.max(0, ksIndex - n);
   const resolvedCards  = backtrackSteps.slice(0, backtrackShown);
 
   const maxValue = Math.max(...forwardSteps.map(s => s.value), 1);
@@ -335,11 +335,11 @@ function KnapsackPanel({
             exit={{ opacity: 0, transition: { duration: 0.6 } }}
             className="flex flex-col gap-1"
           >
-            {forwardSteps.slice(0, knapsackReplayIndex + 1).map((step, i) => {
+            {forwardSteps.slice(0, ksIndex + 1).map((step, i) => {
               const movie = recommendations[step.row - 1]?.movie;
               if (!movie) return null;
               const proportion = step.value / maxValue;
-              const isActive   = i === knapsackReplayIndex;
+              const isActive   = i === ksIndex;
               return (
                 <motion.div
                   key={movie.id}
@@ -430,7 +430,7 @@ function KnapsackPanel({
                       {rec.movie.posterPath && (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
-                          src={`${POSTER_BASE}${rec.movie.posterPath}`}
+                          src={posterUrl(rec.movie.posterPath)}
                           alt={rec.movie.title}
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         />
@@ -458,25 +458,31 @@ function KnapsackPanel({
         style={{ color: 'var(--color-text-muted)' }}
       >
         <span className="tabular-nums">
-          {knapsackReplayIndex} / {knapsackSteps.length}
+          {ksIndex} / {knapsackSteps.length}
         </span>
-        <span style={{ color: replayDone ? 'var(--color-match)' : 'var(--color-knapsack)' }}>
-          {replayDone ? 'Complete ✓' : isReplaying ? 'Running…' : ''}
+        <span style={{ color: ksDone ? 'var(--color-match)' : 'var(--color-knapsack)' }}>
+          {ksDone ? 'Complete ✓' : ksPlaying ? 'Running…' : ksIndex > 0 ? 'Paused' : ''}
         </span>
         <div className="ml-auto flex items-center gap-2">
-          {replayDone && (
+          {ksPlaying ? (
             <button
-              onClick={onReplay}
+              onClick={onPause}
               className="px-2 py-0.5 rounded text-xs"
               style={{ backgroundColor: 'var(--color-knapsack)', color: 'white' }}
             >
-              ▶ Replay
+              ⏸ Pause
+            </button>
+          ) : (
+            <button
+              onClick={onPlay}
+              disabled={knapsackSteps.length === 0}
+              className="px-2 py-0.5 rounded text-xs disabled:opacity-40"
+              style={{ backgroundColor: 'var(--color-knapsack)', color: 'white' }}
+            >
+              {ksDone ? '▶ Replay' : ksIndex > 0 ? '▶ Resume' : '▶ Play'}
             </button>
           )}
-          <SpeedControls
-            replaySpeedMs={replaySpeedMs}
-            onSpeedChange={onSpeedChange}
-          />
+          <SpeedControls replaySpeedMs={replaySpeedMs} onSpeedChange={onSpeedChange} />
         </div>
       </div>
     </div>
@@ -498,21 +504,21 @@ export function AlgoDrawer({
   onOpenChange,
   budgetEnabled,
 }: AlgoDrawerProps) {
-  const [activeTab, setActiveTab]         = useState<DrawerTab>('mergesort');
-  const [replayIndex, setReplayIndex]     = useState(0);
-  const [isReplaying, setIsReplaying]     = useState(false);
-  const [replayDone, setReplayDone]       = useState(false);
-  const [hasAutoPlayed, setHasAutoPlayed] = useState(false);
+  const [activeTab, setActiveTab] = useState<DrawerTab>('mergesort');
   const [replaySpeedMs, setReplaySpeedMs] = useState(120);
+
+  // Per-panel independent playback state
+  const [msIndex, setMsIndex]     = useState(0);  // step cursor into mergeSortStepsRef (0 = not started)
+  const [msPlaying, setMsPlaying] = useState(false);
+  const [msDone, setMsDone]       = useState(false);
+  const [ksIndex, setKsIndex]     = useState(0);  // step cursor into knapsackStepsRef
+  const [ksPlaying, setKsPlaying] = useState(false);
+  const [ksDone, setKsDone]       = useState(false);
 
   // Step buffers — not state; don't trigger re-render on push
   const mergeSortStepsRef  = useRef<MergeSortStep[]>([]);
   const knapsackStepsRef   = useRef<KnapsackStep[]>([]);
   const recommendationsRef = useRef<Recommendation[]>([]);
-
-  // Current display snapshot (state — triggers re-render)
-  const [currentItem, setCurrentItem]           = useState<ReplayItem | null>(null);
-  const [totalReplaySteps, setTotalReplaySteps] = useState(0);
 
   // ── Reset on new sessionId ──────────────────────────────────────────────────
   const prevSessionIdRef = useRef<string | null>(null);
@@ -522,12 +528,12 @@ export function AlgoDrawer({
     mergeSortStepsRef.current  = [];
     knapsackStepsRef.current   = [];
     recommendationsRef.current = [];
-    setCurrentItem(null);
-    setReplayIndex(0);
-    setIsReplaying(false);
-    setReplayDone(false);
-    setHasAutoPlayed(false);
-    setTotalReplaySteps(0);
+    setMsIndex(0);
+    setMsPlaying(false);
+    setMsDone(false);
+    setKsIndex(0);
+    setKsPlaying(false);
+    setKsDone(false);
     setActiveTab('mergesort');
   }, [sessionId]);
 
@@ -555,52 +561,29 @@ export function AlgoDrawer({
     return () => { unsubStep(); unsubComplete(); unsubReady(); };
   }, [sessionId]);
 
-  // ── Auto-play on first open ─────────────────────────────────────────────────
+  // ── MergeSort replay engine ─────────────────────────────────────────────────
   useEffect(() => {
-    if (open && !hasAutoPlayed && mergeSortStepsRef.current.length > 0) {
-      startReplay();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, hasAutoPlayed]);
-
-  // ── Replay engine ───────────────────────────────────────────────────────────
-  function buildAllSteps(): ReplayItem[] {
-    return [
-      ...mergeSortStepsRef.current.map(s => ({ type: 'mergesort' as const, step: s })),
-      ...(budgetEnabled
-        ? knapsackStepsRef.current.map(s => ({ type: 'knapsack' as const, step: s }))
-        : []),
-    ];
-  }
-
-  function startReplay() {
-    setHasAutoPlayed(true);
-    setReplayDone(false);
-    setReplayIndex(0);
-    setIsReplaying(true);
-    setActiveTab('mergesort');
-  }
-
-  useEffect(() => {
-    if (!isReplaying) return;
-    const allSteps = buildAllSteps();
-    setTotalReplaySteps(allSteps.length);
-
-    if (replayIndex >= allSteps.length) {
-      setIsReplaying(false);
-      setReplayDone(true);
+    if (!msPlaying) return;
+    if (msIndex >= mergeSortStepsRef.current.length) {
+      setMsPlaying(false);
+      setMsDone(true);
       return;
     }
-
-    const item = allSteps[replayIndex];
-    setCurrentItem(item);
-    if (item.type === 'mergesort') setActiveTab('mergesort');
-    else if (item.type === 'knapsack') setActiveTab('knapsack');
-
-    const id = setTimeout(() => setReplayIndex(i => i + 1), replaySpeedMs);
+    const id = setTimeout(() => setMsIndex(i => i + 1), replaySpeedMs);
     return () => clearTimeout(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReplaying, replayIndex, replaySpeedMs, budgetEnabled]);
+  }, [msPlaying, msIndex, replaySpeedMs]);
+
+  // ── Knapsack replay engine ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (!ksPlaying) return;
+    if (ksIndex >= knapsackStepsRef.current.length) {
+      setKsPlaying(false);
+      setKsDone(true);
+      return;
+    }
+    const id = setTimeout(() => setKsIndex(i => i + 1), replaySpeedMs);
+    return () => clearTimeout(id);
+  }, [ksPlaying, ksIndex, replaySpeedMs]);
 
   // ── Tab list ────────────────────────────────────────────────────────────────
   const TABS: { id: DrawerTab; label: string }[] = [
@@ -611,9 +594,6 @@ export function AlgoDrawer({
 
   const hasActivity =
     mergeSortStepsRef.current.length > 0 || knapsackStepsRef.current.length > 0;
-
-  const mergeSortCount = mergeSortStepsRef.current.length;
-  const knapsackReplayIndex = Math.max(0, replayIndex - mergeSortCount);
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
@@ -675,33 +655,33 @@ export function AlgoDrawer({
           >
             {activeTab === 'mergesort' && (
               <MergeSortPanel
-                currentStep={
-                  currentItem?.type === 'mergesort'
-                    ? (currentItem.step as MergeSortStep)
-                    : null
-                }
-                replayIndex={Math.min(replayIndex, mergeSortCount)}
-                totalSteps={mergeSortCount}
-                replayDone={replayDone}
-                isReplaying={isReplaying}
-                onReplay={startReplay}
+                currentStep={msIndex > 0 ? (mergeSortStepsRef.current[msIndex - 1] ?? null) : null}
+                msIndex={msIndex}
+                totalSteps={mergeSortStepsRef.current.length}
+                msPlaying={msPlaying}
+                msDone={msDone}
+                onPlay={() => {
+                  if (msDone) { setMsIndex(0); setMsDone(false); }
+                  setMsPlaying(true);
+                }}
+                onPause={() => setMsPlaying(false)}
                 replaySpeedMs={replaySpeedMs}
                 onSpeedChange={setReplaySpeedMs}
               />
             )}
             {activeTab === 'knapsack' && budgetEnabled && (
               <KnapsackPanel
-                currentStep={
-                  currentItem?.type === 'knapsack'
-                    ? (currentItem.step as KnapsackStep)
-                    : null
-                }
+                currentStep={ksIndex > 0 ? (knapsackStepsRef.current[ksIndex - 1] ?? null) : null}
                 knapsackSteps={knapsackStepsRef.current}
                 recommendations={recommendationsRef.current}
-                knapsackReplayIndex={knapsackReplayIndex}
-                replayDone={replayDone}
-                isReplaying={isReplaying}
-                onReplay={startReplay}
+                ksIndex={ksIndex}
+                ksPlaying={ksPlaying}
+                ksDone={ksDone}
+                onPlay={() => {
+                  if (ksDone) { setKsIndex(0); setKsDone(false); }
+                  setKsPlaying(true);
+                }}
+                onPause={() => setKsPlaying(false)}
                 replaySpeedMs={replaySpeedMs}
                 onSpeedChange={setReplaySpeedMs}
               />
