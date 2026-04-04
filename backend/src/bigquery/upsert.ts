@@ -1,6 +1,8 @@
-import { dataset } from './client';
+import { dataset, bq } from './client';
 import { TABLE_NAMES } from './schema';
 import type { Movie } from '../types';
+
+const DS = `${process.env.GCP_PROJECT_ID ?? 'cinegraph'}.${process.env.GCP_DATASET_ID ?? 'cinegraph'}`;
 
 const BATCH = 500;
 
@@ -32,13 +34,20 @@ export async function upsertMovies(movies: Movie[]): Promise<void> {
 
   const table = dataset.table(TABLE_NAMES.movies);
   for (const batch of chunk(rows, BATCH)) {
+    // DELETE existing rows for this batch first, then INSERT — true upsert idempotency.
+    // Streaming insert insertId only dedupes within a short window; DELETE+INSERT is
+    // correct for re-runs hours/days later.
+    const ids = batch.map(r => r.movie_id).join(',');
+    await bq.query({ query: `DELETE FROM \`${DS}.${TABLE_NAMES.movies}\` WHERE movie_id IN (${ids})` });
+
     try {
       await table.insert(
-        batch.map(row => ({ insertId: String(row.movie_id), json: row })),
-        { ignoreUnknownValues: true, skipInvalidRows: true, raw: true },
+        batch.map(row => ({ json: row })),
+        { ignoreUnknownValues: true, skipInvalidRows: false },
       );
     } catch (err: unknown) {
-      // PartialFailureError: some rows rejected — log details, skip bad rows
+      // PartialFailureError: some rows rejected — log details and re-throw so the
+      // caller knows bad rows were NOT inserted (skipInvalidRows is false).
       if (err && typeof err === 'object' && 'name' in err && (err as {name: string}).name === 'PartialFailureError') {
         const pfe = err as { errors?: Array<{ row: unknown; errors: Array<{ reason: string; message: string }> }> };
         const rowErrors = pfe.errors ?? [];
@@ -48,8 +57,7 @@ export async function upsertMovies(movies: Movie[]): Promise<void> {
           console.error(`  movie_id=${id}: ${errors.map(e => `${e.reason}: ${e.message}`).join('; ')}`);
         }
         if (rowErrors.length > 5) console.error(`  ... and ${rowErrors.length - 5} more`);
-        // Continue — accepted rows were still inserted
-        continue;
+        throw err;
       }
       throw err;
     }

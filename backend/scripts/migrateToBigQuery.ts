@@ -73,11 +73,19 @@ async function main() {
     let skipUpsert = false;
     if (RESUME) {
       const DS = `${process.env.GCP_PROJECT_ID ?? 'cinegraph'}.${process.env.GCP_DATASET_ID ?? 'cinegraph'}`;
-      const [rows] = await bq.query({ query: `SELECT COUNT(DISTINCT movie_id) AS cnt FROM \`${DS}.movies\`` });
+      const [rows] = await bq.query({
+        query: `SELECT COUNT(DISTINCT movie_id) AS cnt, COUNTIF(title IS NULL OR title = '') AS bad_title_cnt FROM \`${DS}.movies\``,
+      });
       const bqCount = Number((rows[0] as Record<string, unknown>).cnt ?? 0);
-      if (bqCount >= movies.length) {
+      const badTitleCount = Number((rows[0] as Record<string, unknown>).bad_title_cnt ?? 0);
+      logger.info(`Resume check — BigQuery has ${bqCount} distinct movies (JSONL has ${movies.length}), ${badTitleCount} row(s) with null/empty title`);
+      if (bqCount >= movies.length && badTitleCount === 0) {
         skipUpsert = true;
-        logger.info(`Skipping upsert — BigQuery already has ${bqCount} movies (JSONL has ${movies.length}).`);
+        logger.info(`Skipping upsert — BigQuery count sufficient and all rows have valid titles.`);
+      } else if (bqCount < movies.length) {
+        logger.info(`Upsert required — BigQuery row count (${bqCount}) is below JSONL count (${movies.length}).`);
+      } else {
+        logger.info(`Upsert required — ${badTitleCount} row(s) have null/empty titles (possible PartialFailureError corruption).`);
       }
     }
     if (!skipUpsert) {
