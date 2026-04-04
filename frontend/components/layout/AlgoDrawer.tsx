@@ -93,7 +93,7 @@ function SortCard({
               ? '2px solid var(--color-brand)'
               : cardState === 'merge'
               ? '2px solid var(--color-match)'
-              : '1px solid #333',
+              : '1px solid var(--color-card-border)',
           backgroundColor: 'var(--color-bg-card)',
         }}
       >
@@ -122,7 +122,7 @@ function SortCard({
         className="truncate text-center block"
         style={{
           fontSize: '9px',
-          color: cardState === 'compare' ? 'var(--color-knapsack)' : '#555',
+          color: cardState === 'compare' ? 'var(--color-knapsack)' : 'var(--color-text-muted)',
           width: '44px',
         }}
       >
@@ -422,7 +422,7 @@ function KnapsackPanel({
                       style={{
                         width: '44px',
                         height: '64px',
-                        border: included ? `2px solid var(--color-match)` : '1px solid #333',
+                        border: included ? `2px solid var(--color-match)` : '1px solid var(--color-card-border)',
                         boxShadow: included
                           ? '0 0 8px rgba(74,222,128,0.5)'
                           : 'none',

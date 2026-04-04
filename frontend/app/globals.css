@@ -30,6 +30,7 @@
   --color-star-active:    #F59E0B;
   --color-star-inactive:  #374151;
   --color-border:         rgba(255, 255, 255, 0.08);
+  --color-card-border:    #333;
 
   /* D3 Viz */
   --viz-color-1:          #7C3AED;
