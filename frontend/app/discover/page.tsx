@@ -39,6 +39,10 @@ export default function DiscoverPage() {
   const [sessionId, setSessionId]         = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen]       = useState(false);
 
+  // Ref that stays in sync with sessionId state so the stable socket
+  // handler ([] deps) can read the current value without stale closure issues.
+  const sessionIdRef = useRef<string | null>(null);
+
   // Refs so fetchRecommendations stays stable
   const engineRef = useRef(engine);
   const budgetRef = useRef(budget);
@@ -61,6 +65,7 @@ export default function DiscoverPage() {
         budgetRef.current,
       );
       setSessionId(newId);
+      sessionIdRef.current = newId;
       // Keep spinner — real data arrives via socket recommend:ready
     } catch {
       clearTimeout(timeoutRef.current!);
@@ -86,6 +91,7 @@ export default function DiscoverPage() {
   // Socket: handle recommend:ready and recommend:error
   useEffect(() => {
     const unsubReady = socketEvents.onRecommendReady((event: RecommendReadyEvent) => {
+      if (event.sessionId !== sessionIdRef.current) return;
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       setMovies(event.recommendations.map(r => r.movie));
       const percents: Record<number, number> = {};
