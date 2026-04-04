@@ -61,13 +61,13 @@ export function MovieCard({ movie, matchPercent, reason }: MovieCardProps) {
           }}
         />
 
-        {/* Match % badge — visible on hover */}
-        {matchPercent !== undefined && hovered && (
+        {/* Match % badge — always visible when provided */}
+        {matchPercent !== undefined && matchPercent > 0 && (
           <div
-            className="absolute top-2 right-2 text-xs font-bold px-2 py-0.5 rounded"
-            style={{ backgroundColor: 'var(--color-brand)', color: 'white' }}
+            className="absolute top-2 left-2 text-xs font-bold px-1.5 py-0.5 rounded"
+            style={{ backgroundColor: 'rgba(0,0,0,0.75)', color: '#4ade80' }}
           >
-            {matchPercent}% Match
+            {matchPercent}% match
           </div>
         )}
       </div>
