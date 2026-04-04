@@ -43,6 +43,11 @@
   --viz-dijkstra-path:    #A78BFA;
   --viz-heatmap-low:      #1E1B4B;
   --viz-heatmap-high:     #7C3AED;
+
+  /* Knapsack viz */
+  --viz-ks-bg:            #1a1a2e;
+  --viz-ks-low:           #2d1b69;
+  --color-exclude:        #ef4444;
 }
 
 * {

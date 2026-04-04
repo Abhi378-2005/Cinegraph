@@ -273,26 +273,195 @@ function KnapsackPanel({
   replaySpeedMs,
   onSpeedChange,
 }: KnapsackPanelProps) {
-  return (
-    <div className="p-4 flex flex-col gap-3 h-full">
-      <p className="text-sm font-semibold" style={{ color: 'var(--color-knapsack)' }}>
-        0/1 Knapsack — Watch Budget Optimizer
-      </p>
-      {!currentStep ? (
+  const n = recommendations.length;
+  // Forward steps: indices 0..n-1 (one per movie, ascending row)
+  const forwardSteps   = knapsackSteps.slice(0, n);
+  // Backtrack steps: indices n..end (descending row, resolves selection)
+  const backtrackSteps = knapsackSteps.slice(n);
+
+  const isPhase2       = knapsackReplayIndex >= n;
+  const backtrackShown = Math.max(0, knapsackReplayIndex - n);
+  const resolvedCards  = backtrackSteps.slice(0, backtrackShown);
+
+  const maxValue = Math.max(...forwardSteps.map(s => s.value), 1);
+
+  if (!currentStep && knapsackSteps.length === 0) {
+    return (
+      <div className="p-4">
+        <p className="text-sm font-semibold mb-2" style={{ color: 'var(--color-knapsack)' }}>
+          0/1 Knapsack — Watch Budget Optimizer
+        </p>
         <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
           Selects movies maximizing score within your watch-time budget.
           Steps appear here when the engine runs.
         </p>
-      ) : (
-        <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-          Row {currentStep.row} / {recommendations.length} — decision:{' '}
-          <span style={{ color: currentStep.decision === 'include' ? 'var(--color-match)' : 'var(--color-text-muted)' }}>
-            {currentStep.decision}
-          </span>
+      </div>
+    );
+  }
+
+  const includedCards = resolvedCards.filter(s => s.decision === 'include');
+  const totalRuntime  = includedCards.reduce((acc, s) => {
+    return acc + (recommendations[s.row - 1]?.movie.runtime ?? 90);
+  }, 0);
+  const latestValue   = currentStep?.value ?? 0;
+
+  return (
+    <div className="p-4 flex flex-col gap-3">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <p className="text-sm font-semibold" style={{ color: 'var(--color-knapsack)' }}>
+          0/1 Knapsack — Watch Budget Optimizer
         </p>
-      )}
-      <div className="mt-auto flex items-center gap-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-        <span className="tabular-nums">{knapsackReplayIndex} / {knapsackSteps.length}</span>
+        <span
+          className="text-xs px-2 py-0.5 rounded"
+          style={{
+            backgroundColor: isPhase2
+              ? 'rgba(74,222,128,0.15)'
+              : 'rgba(167,139,250,0.15)',
+            color: isPhase2 ? 'var(--color-match)' : 'var(--color-knapsack)',
+          }}
+        >
+          {isPhase2 ? 'Phase 2: Selecting' : 'Phase 1: Evaluating'}
+        </span>
+      </div>
+
+      <AnimatePresence mode="wait">
+        {!isPhase2 ? (
+          /* ── Phase 1: DP evaluation rows ── */
+          <motion.div
+            key="phase1"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0.6 } }}
+            className="flex flex-col gap-1"
+          >
+            {forwardSteps.slice(0, knapsackReplayIndex + 1).map((step, i) => {
+              const movie = recommendations[step.row - 1]?.movie;
+              if (!movie) return null;
+              const proportion = step.value / maxValue;
+              const isActive   = i === knapsackReplayIndex;
+              return (
+                <motion.div
+                  key={movie.id}
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="flex items-center gap-2"
+                >
+                  <span
+                    className="truncate flex-shrink-0 text-xs"
+                    style={{
+                      width: '84px',
+                      color: isActive ? 'var(--color-knapsack)' : 'var(--color-text-secondary)',
+                    }}
+                  >
+                    {movie.title}
+                  </span>
+                  <div
+                    className="flex-1 h-3 rounded overflow-hidden"
+                    style={{ backgroundColor: 'var(--viz-ks-bg)' }}
+                  >
+                    <motion.div
+                      className="h-full rounded"
+                      animate={{ width: `${proportion * 100}%` }}
+                      transition={{ duration: 0.15 }}
+                      style={{
+                        backgroundColor: isActive
+                          ? 'var(--color-knapsack)'
+                          : step.decision === 'include'
+                          ? 'var(--color-brand)'
+                          : 'var(--viz-ks-low)',
+                        boxShadow: isActive ? `0 0 6px var(--color-knapsack)` : 'none',
+                      }}
+                    />
+                  </div>
+                  <span
+                    className="flex-shrink-0 text-center"
+                    style={{
+                      width: '14px',
+                      fontSize: '10px',
+                      color: step.decision === 'include' ? 'var(--color-match)' : '#444',
+                    }}
+                  >
+                    {step.decision === 'include' ? '✓' : '·'}
+                  </span>
+                </motion.div>
+              );
+            })}
+          </motion.div>
+        ) : (
+          /* ── Phase 2: Card selection ── */
+          <motion.div
+            key="phase2"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex flex-col gap-3"
+          >
+            {/* Running total */}
+            <p className="text-xs" style={{ color: 'var(--color-match)' }}>
+              Selected {includedCards.length} movie
+              {includedCards.length !== 1 ? 's' : ''} · {totalRuntime} min
+              {latestValue > 0 ? ` · score ${latestValue}` : ''}
+            </p>
+            {/* Cards */}
+            <div className="flex gap-3 flex-wrap">
+              {resolvedCards.map((step, i) => {
+                const rec = recommendations[step.row - 1];
+                if (!rec) return null;
+                const included = step.decision === 'include';
+                return (
+                  <motion.div
+                    key={`ks-card-${rec.movie.id}-${i}`}
+                    initial={{ x: -30, opacity: 0 }}
+                    animate={{ x: 0, opacity: included ? 1 : 0.2 }}
+                    transition={{ duration: 0.25 }}
+                    className="flex flex-col items-center gap-1"
+                    style={{ width: '44px' }}
+                  >
+                    <div
+                      className="relative rounded overflow-hidden"
+                      style={{
+                        width: '44px',
+                        height: '64px',
+                        border: included ? `2px solid var(--color-match)` : '1px solid #333',
+                        boxShadow: included
+                          ? '0 0 8px rgba(74,222,128,0.5)'
+                          : 'none',
+                        backgroundColor: 'var(--color-bg-card)',
+                      }}
+                    >
+                      {rec.movie.posterPath && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={`${POSTER_BASE}${rec.movie.posterPath}`}
+                          alt={rec.movie.title}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      )}
+                    </div>
+                    <span
+                      style={{
+                        fontSize: '9px',
+                        color: included ? 'var(--color-match)' : 'var(--color-exclude)',
+                      }}
+                    >
+                      {included ? '✓' : '✗'}
+                    </span>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Footer */}
+      <div
+        className="flex items-center gap-3 text-xs mt-auto"
+        style={{ color: 'var(--color-text-muted)' }}
+      >
+        <span className="tabular-nums">
+          {knapsackReplayIndex} / {knapsackSteps.length}
+        </span>
         <span style={{ color: replayDone ? 'var(--color-match)' : 'var(--color-knapsack)' }}>
           {replayDone ? 'Complete ✓' : isReplaying ? 'Running…' : ''}
         </span>
@@ -306,7 +475,10 @@ function KnapsackPanel({
               ▶ Replay
             </button>
           )}
-          <SpeedControls replaySpeedMs={replaySpeedMs} onSpeedChange={onSpeedChange} />
+          <SpeedControls
+            replaySpeedMs={replaySpeedMs}
+            onSpeedChange={onSpeedChange}
+          />
         </div>
       </div>
     </div>
