@@ -90,9 +90,9 @@ function SortCard({
           height: '64px',
           border:
             cardState === 'compare'
-              ? '2px solid #7C3AED'
+              ? '2px solid var(--color-brand)'
               : cardState === 'merge'
-              ? '2px solid #4ade80'
+              ? '2px solid var(--color-match)'
               : '1px solid #333',
           backgroundColor: 'var(--color-bg-card)',
         }}
@@ -110,7 +110,7 @@ function SortCard({
           className="absolute top-0.5 right-0.5 rounded px-0.5"
           style={{
             background: 'rgba(0,0,0,0.85)',
-            color: '#a78bfa',
+            color: 'var(--color-knapsack)',
             fontSize: '8px',
             lineHeight: '14px',
           }}
@@ -122,7 +122,7 @@ function SortCard({
         className="truncate text-center block"
         style={{
           fontSize: '9px',
-          color: cardState === 'compare' ? '#a78bfa' : '#555',
+          color: cardState === 'compare' ? 'var(--color-knapsack)' : '#555',
           width: '44px',
         }}
       >
@@ -224,7 +224,7 @@ function MergeSortPanel({
           step {replayIndex} / {totalSteps}
         </span>
         <span
-          style={{ color: replayDone ? '#4ade80' : 'var(--color-brand)' }}
+          style={{ color: replayDone ? 'var(--color-match)' : 'var(--color-brand)' }}
         >
           {replayDone ? 'Complete ✓' : isReplaying ? 'Sorting…' : ''}
         </span>
@@ -275,7 +275,7 @@ function KnapsackPanel({
 }: KnapsackPanelProps) {
   return (
     <div className="p-4 flex flex-col gap-3 h-full">
-      <p className="text-sm font-semibold" style={{ color: '#a78bfa' }}>
+      <p className="text-sm font-semibold" style={{ color: 'var(--color-knapsack)' }}>
         0/1 Knapsack — Watch Budget Optimizer
       </p>
       {!currentStep ? (
@@ -286,14 +286,14 @@ function KnapsackPanel({
       ) : (
         <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
           Row {currentStep.row} / {recommendations.length} — decision:{' '}
-          <span style={{ color: currentStep.decision === 'include' ? '#4ade80' : 'var(--color-text-muted)' }}>
+          <span style={{ color: currentStep.decision === 'include' ? 'var(--color-match)' : 'var(--color-text-muted)' }}>
             {currentStep.decision}
           </span>
         </p>
       )}
       <div className="mt-auto flex items-center gap-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
         <span className="tabular-nums">{knapsackReplayIndex} / {knapsackSteps.length}</span>
-        <span style={{ color: replayDone ? '#4ade80' : '#a78bfa' }}>
+        <span style={{ color: replayDone ? 'var(--color-match)' : 'var(--color-knapsack)' }}>
           {replayDone ? 'Complete ✓' : isReplaying ? 'Running…' : ''}
         </span>
         <div className="ml-auto flex items-center gap-2">
@@ -301,7 +301,7 @@ function KnapsackPanel({
             <button
               onClick={onReplay}
               className="px-2 py-0.5 rounded text-xs"
-              style={{ backgroundColor: '#a78bfa', color: 'white' }}
+              style={{ backgroundColor: 'var(--color-knapsack)', color: 'white' }}
             >
               ▶ Replay
             </button>
@@ -391,7 +391,7 @@ export function AlgoDrawer({
       startReplay();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, hasAutoPlayed]);
 
   // ── Replay engine ───────────────────────────────────────────────────────────
   function buildAllSteps(): ReplayItem[] {

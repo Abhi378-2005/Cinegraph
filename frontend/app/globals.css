@@ -26,6 +26,7 @@
   /* Semantic */
   --color-match:          #4ade80;
   --color-match-high:     #A78BFA;
+  --color-knapsack:       #a78bfa;
   --color-star-active:    #F59E0B;
   --color-star-inactive:  #374151;
   --color-border:         rgba(255, 255, 255, 0.08);
