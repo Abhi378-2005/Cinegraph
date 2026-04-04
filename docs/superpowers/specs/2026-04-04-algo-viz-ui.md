@@ -6,39 +6,51 @@ Upgrade the AlgoDrawer from a simple progress-bar display into a full animated a
 
 ## Architecture
 
-**Backend:** No changes. Already emits `algo:step` and `algo:complete` with all required data.
-
-**Frontend-only changes:**
+**Backend changes (minimal):**
 
 | File | Change |
 |---|---|
-| `frontend/components/layout/AlgoDrawer.tsx` | Full redesign — step buffering, replay engine, animated MergeSort and Knapsack panels |
+| `backend/src/routes/recommend.ts` | Thread `sessionId` into every `algo:step`, `algo:complete`, and `recommend:ready` emit so the frontend can correlate events to a specific job |
+
+**Frontend changes:**
+
+| File | Change |
+|---|---|
+| `frontend/components/layout/AlgoDrawer.tsx` | Full redesign — sessionId-gated step buffering, replay engine, animated MergeSort and Knapsack panels |
 | `frontend/components/recommendation/WatchBudget.tsx` | Add enable/disable toggle; slider hidden when off; emits `undefined` when off |
 | `frontend/app/discover/page.tsx` | Pass `budget: undefined` when toggle off; lift `drawerOpen` state; engine badge + match score + "How were these picked?" link that sets `drawerOpen(true)` |
 | `frontend/components/movies/MovieCard.tsx` | Add optional `matchPercent` badge prop |
-
-`lib/types.ts` requires no changes — all step types already carry the data needed.
+| `frontend/lib/types.ts` | Add `sessionId: string` field to `AlgoStepEvent`, `AlgoCompleteEvent`, and `RecommendReadyEvent` |
 
 ---
 
 ## Section 1: AlgoDrawer — Buffering & Replay Engine
 
+### SessionId correlation
+
+`POST /recommend` already returns `{ sessionId }`. The discover page stores the latest `sessionId` and passes it to `AlgoDrawer` as a prop. AlgoDrawer only buffers steps whose `sessionId` matches the current prop value — stale steps from a previous job are silently dropped. When a new `sessionId` prop arrives, all buffers are cleared immediately.
+
+This prevents mixed-up replays when the user changes engine or budget before the previous job finishes streaming.
+
 ### State
 
 ```typescript
-mergeSortSteps: MergeSortStep[]   // accumulates as algo:step arrives
-knapsackSteps: KnapsackStep[]     // accumulates as algo:step arrives
-recommendations: Recommendation[] // stored on recommend:ready
+sessionId: string                 // prop from discover page — current job
+mergeSortSteps: MergeSortStep[]   // accumulates as algo:step arrives (current sessionId only)
+knapsackSteps: KnapsackStep[]     // accumulates as algo:step arrives (current sessionId only)
+recommendations: Recommendation[] // stored on recommend:ready (current sessionId only)
 replayIndex: number               // current step being displayed
 isReplaying: boolean
-hasAutoPlayed: boolean            // ensures auto-play fires only once per load
+hasAutoPlayed: boolean            // ensures auto-play fires only once per sessionId
 replaySpeedMs: number             // default 120ms, range 60–300ms
 ```
 
 ### Step lifecycle
 
-1. `algo:step` arrives → pushed into `mergeSortSteps` or `knapsackSteps` (no render change yet).
-2. `recommend:ready` arrives → AlgoDrawer subscribes to `onRecommendReady` directly (same pattern as `onAlgoStep`) → stores recommendations internally, marks data ready.
+1. `POST /recommend` fires → discover page stores returned `sessionId`, passes it to AlgoDrawer → AlgoDrawer clears all buffers.
+2. `algo:step` arrives → check `event.sessionId === props.sessionId`; if match, push into `mergeSortSteps` or `knapsackSteps`; otherwise drop.
+3. `recommend:ready` arrives → check `event.sessionId`; if match, store recommendations internally, mark data ready.
+4. `hasAutoPlayed` is reset to `false` whenever `sessionId` prop changes so the new run auto-plays on drawer open.
 3. User opens drawer for the **first time** → `hasAutoPlayed` is false → auto-play begins.
 4. Auto-play is tab-aware: plays MergeSort steps first (auto-switches to MergeSort tab), then Knapsack steps (auto-switches to Knapsack tab if budget was enabled).
 5. Replay finishes → interval clears → `▶ Replay` button appears.
@@ -164,12 +176,20 @@ Small text link rendered next to the engine badge on the "Recommended For You" r
 ## Data Flow Summary
 
 ```
-POST /recommend
-  → backend streams algo:step (mergeSort) → AlgoDrawer buffers
-  → backend streams algo:step (knapsack, if budget set) → AlgoDrawer buffers
-  → backend emits recommend:ready → discover page renders movies
-                                  → AlgoDrawer stores recommendations
-                                  → user opens drawer → auto-play fires
+POST /recommend → { sessionId }
+  → discover page stores sessionId, passes to AlgoDrawer as prop
+  → AlgoDrawer clears all step buffers
+
+  backend streams algo:step { sessionId, algorithm, step }
+    → AlgoDrawer checks sessionId match → buffers or drops
+
+  backend streams algo:complete { sessionId, algorithm, totalSteps }
+    → AlgoDrawer checks sessionId match → marks algorithm done
+
+  backend emits recommend:ready { sessionId, recommendations, engine }
+    → discover page renders movies, stores engine
+    → AlgoDrawer checks sessionId match → stores recommendations, marks ready
+    → user opens drawer for first time → auto-play fires (mergeSort → knapsack)
 ```
 
 ---
