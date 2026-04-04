@@ -508,17 +508,25 @@ export function AlgoDrawer({
   const [replaySpeedMs, setReplaySpeedMs] = useState(120);
 
   // Per-panel independent playback state
-  const [msIndex, setMsIndex]     = useState(0);  // step cursor into mergeSortStepsRef (0 = not started)
-  const [msPlaying, setMsPlaying] = useState(false);
-  const [msDone, setMsDone]       = useState(false);
-  const [ksIndex, setKsIndex]     = useState(0);  // step cursor into knapsackStepsRef
-  const [ksPlaying, setKsPlaying] = useState(false);
-  const [ksDone, setKsDone]       = useState(false);
+  const [msIndex, setMsIndex]           = useState(0);  // step cursor into mergeSortStepsRef (0 = not started)
+  const [msPlaying, setMsPlaying]       = useState(false);
+  const [msDone, setMsDone]             = useState(false);
+  const [msTotalSteps, setMsTotalSteps] = useState(0);  // set on algo:complete to trigger re-render
+  const [ksIndex, setKsIndex]           = useState(0);  // step cursor into knapsackStepsRef
+  const [ksPlaying, setKsPlaying]       = useState(false);
+  const [ksDone, setKsDone]             = useState(false);
+  const [ksTotalSteps, setKsTotalSteps] = useState(0);
 
   // Step buffers — not state; don't trigger re-render on push
   const mergeSortStepsRef  = useRef<MergeSortStep[]>([]);
   const knapsackStepsRef   = useRef<KnapsackStep[]>([]);
   const recommendationsRef = useRef<Recommendation[]>([]);
+
+  // Ref that stays in sync with sessionId prop so the stable ([] deps) socket
+  // handler can read the current value without stale closure issues — same
+  // pattern used in discover/page.tsx for its own recommend:ready handler.
+  const currentSessionIdRef = useRef<string | null>(sessionId);
+  currentSessionIdRef.current = sessionId;
 
   // ── Reset on new sessionId ──────────────────────────────────────────────────
   const prevSessionIdRef = useRef<string | null>(null);
@@ -531,16 +539,21 @@ export function AlgoDrawer({
     setMsIndex(0);
     setMsPlaying(false);
     setMsDone(false);
+    setMsTotalSteps(0);
     setKsIndex(0);
     setKsPlaying(false);
     setKsDone(false);
+    setKsTotalSteps(0);
     setActiveTab('mergesort');
   }, [sessionId]);
 
   // ── Socket subscriptions ────────────────────────────────────────────────────
+  // Stable handlers ([] deps) — use currentSessionIdRef to avoid stale closures.
+  // Steps can arrive in the render gap between setSessionId() and the new prop
+  // reaching this component; reading the ref avoids dropping those early events.
   useEffect(() => {
     const unsubStep = socketEvents.onAlgoStep((event: AlgoStepEvent) => {
-      if (event.sessionId !== sessionId) return;
+      if (event.sessionId !== currentSessionIdRef.current) return;
       if (event.algorithm === 'mergeSort') {
         mergeSortStepsRef.current.push(event.step as MergeSortStep);
       } else if (event.algorithm === 'knapsack') {
@@ -549,17 +562,22 @@ export function AlgoDrawer({
     });
 
     const unsubComplete = socketEvents.onAlgoComplete((event: AlgoCompleteEvent) => {
-      if (event.sessionId !== sessionId) return;
-      // Replay drives off ref buffers; no explicit action needed here
+      if (event.sessionId !== currentSessionIdRef.current) return;
+      // Trigger re-render so Play button enables and totalSteps shows correctly
+      if (event.algorithm === 'mergeSort') {
+        setMsTotalSteps(mergeSortStepsRef.current.length);
+      } else if (event.algorithm === 'knapsack') {
+        setKsTotalSteps(knapsackStepsRef.current.length);
+      }
     });
 
     const unsubReady = socketEvents.onRecommendReady((event: RecommendReadyEvent) => {
-      if (event.sessionId !== sessionId) return;
+      if (event.sessionId !== currentSessionIdRef.current) return;
       recommendationsRef.current = event.recommendations;
     });
 
     return () => { unsubStep(); unsubComplete(); unsubReady(); };
-  }, [sessionId]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── MergeSort replay engine ─────────────────────────────────────────────────
   useEffect(() => {
@@ -592,8 +610,7 @@ export function AlgoDrawer({
     { id: 'overview',  label: 'Overview' },
   ];
 
-  const hasActivity =
-    mergeSortStepsRef.current.length > 0 || knapsackStepsRef.current.length > 0;
+  const hasActivity = msTotalSteps > 0 || ksTotalSteps > 0;
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
@@ -657,7 +674,7 @@ export function AlgoDrawer({
               <MergeSortPanel
                 currentStep={msIndex > 0 ? (mergeSortStepsRef.current[msIndex - 1] ?? null) : null}
                 msIndex={msIndex}
-                totalSteps={mergeSortStepsRef.current.length}
+                totalSteps={msTotalSteps}
                 msPlaying={msPlaying}
                 msDone={msDone}
                 onPlay={() => {
@@ -672,7 +689,7 @@ export function AlgoDrawer({
             {activeTab === 'knapsack' && budgetEnabled && (
               <KnapsackPanel
                 currentStep={ksIndex > 0 ? (knapsackStepsRef.current[ksIndex - 1] ?? null) : null}
-                knapsackSteps={knapsackStepsRef.current}
+                knapsackSteps={knapsackStepsRef.current.slice(0, ksTotalSteps)}
                 recommendations={recommendationsRef.current}
                 ksIndex={ksIndex}
                 ksPlaying={ksPlaying}
