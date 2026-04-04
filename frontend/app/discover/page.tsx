@@ -11,6 +11,13 @@ import { api } from '@/lib/api';
 import { socketEvents } from '@/lib/socket';
 import type { Movie, RecommendReadyEvent } from '@/lib/types';
 
+const ENGINE_COLORS: Record<string, string> = {
+  hybrid:        'var(--color-brand)',
+  content:       '#3b82f6',
+  collaborative: '#14b8a6',
+  cold_start:    '#f59e0b',
+};
+
 function groupByGenre(movies: Movie[]): Record<string, Movie[]> {
   const groups: Record<string, Movie[]> = {};
   for (const movie of movies) {
@@ -22,13 +29,17 @@ function groupByGenre(movies: Movie[]): Record<string, Movie[]> {
 }
 
 export default function DiscoverPage() {
-  const [engine, setEngine] = useState<Engine>('hybrid');
-  const [budget, setBudget] = useState(120);
-  const [movies, setMovies] = useState<Movie[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [engine, setEngine]               = useState<Engine>('hybrid');
+  const [budget, setBudget]               = useState<number | undefined>(undefined);
+  const [movies, setMovies]               = useState<Movie[]>([]);
+  const [matchPercents, setMatchPercents] = useState<Record<number, number>>({});
+  const [activeEngine, setActiveEngine]   = useState<string>('');
+  const [loading, setLoading]             = useState(true);
+  const [error, setError]                 = useState(false);
+  const [sessionId, setSessionId]         = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen]       = useState(false);
 
-  // Keep refs so fetchRecommendations always sees latest values without re-creating
+  // Refs so fetchRecommendations stays stable
   const engineRef = useRef(engine);
   const budgetRef = useRef(budget);
   engineRef.current = engine;
@@ -39,21 +50,24 @@ export default function DiscoverPage() {
   const fetchRecommendations = useCallback(async () => {
     setLoading(true);
     setError(false);
-    // 30s safety timeout — if socket never fires recommend:ready
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
       setError(true);
       setLoading(false);
     }, 30_000);
     try {
-      await api.getRecommendations(engineRef.current, budgetRef.current);
+      const { sessionId: newId } = await api.getRecommendations(
+        engineRef.current,
+        budgetRef.current,
+      );
+      setSessionId(newId);
       // Keep spinner — real data arrives via socket recommend:ready
     } catch {
       clearTimeout(timeoutRef.current!);
       setError(true);
       setLoading(false);
     }
-  }, []); // stable — reads engine/budget from refs
+  }, []); // stable — reads from refs
 
   // Fire once on mount
   useEffect(() => {
@@ -61,19 +75,23 @@ export default function DiscoverPage() {
     return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current); };
   }, [fetchRecommendations]);
 
-  // Re-fetch when engine or budget changes (after initial mount)
+  // Re-fetch when engine or budget changes (skip first render)
   const isFirstRender = useRef(true);
   useEffect(() => {
     if (isFirstRender.current) { isFirstRender.current = false; return; }
     fetchRecommendations();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine, budget]);
 
-  // Listen for real recommendations from backend via Socket.io
+  // Socket: handle recommend:ready and recommend:error
   useEffect(() => {
     const unsubReady = socketEvents.onRecommendReady((event: RecommendReadyEvent) => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       setMovies(event.recommendations.map(r => r.movie));
+      const percents: Record<number, number> = {};
+      event.recommendations.forEach(r => { percents[r.movie.id] = r.matchPercent; });
+      setMatchPercents(percents);
+      setActiveEngine(event.engine);
       setLoading(false);
     });
     const unsubError = socketEvents.onRecommendError(() => {
@@ -85,7 +103,30 @@ export default function DiscoverPage() {
   }, []);
 
   const genreGroups = groupByGenre(movies);
-  const topMovies = movies.slice(0, 6);
+  const topMovies   = movies.slice(0, 6);
+
+  const topRowExtras = (
+    <div className="flex items-center gap-2">
+      {activeEngine && (
+        <span
+          className="text-xs px-2 py-0.5 rounded-full font-medium"
+          style={{
+            backgroundColor: ENGINE_COLORS[activeEngine] ?? 'var(--color-brand)',
+            color: 'white',
+          }}
+        >
+          {activeEngine}
+        </span>
+      )}
+      <button
+        onClick={() => setDrawerOpen(true)}
+        className="text-xs"
+        style={{ color: 'var(--color-text-muted)' }}
+      >
+        How were these picked?
+      </button>
+    </div>
+  );
 
   return (
     <main
@@ -100,7 +141,7 @@ export default function DiscoverPage() {
 
       {/* Movie rows */}
       {loading ? (
-        <div className="flex items-center justify-center py-24">
+        <div className="flex items-center justify-content py-24">
           <div
             className="w-8 h-8 rounded-full border-2 animate-spin"
             style={{ borderColor: 'var(--color-brand) transparent transparent transparent' }}
@@ -113,7 +154,12 @@ export default function DiscoverPage() {
       ) : (
         <div className="flex flex-col gap-10">
           {topMovies.length > 0 && (
-            <MovieRow title="Recommended For You" movies={topMovies} />
+            <MovieRow
+              title="Recommended For You"
+              movies={topMovies}
+              matchPercents={matchPercents}
+              titleExtras={topRowExtras}
+            />
           )}
           {Object.entries(genreGroups)
             .filter(([, ms]) => ms.length >= 2)
@@ -125,7 +171,12 @@ export default function DiscoverPage() {
       )}
 
       {/* Algorithm drawer pinned at bottom */}
-      <AlgoDrawer />
+      <AlgoDrawer
+        sessionId={sessionId}
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        budgetEnabled={budget !== undefined}
+      />
     </main>
   );
 }
