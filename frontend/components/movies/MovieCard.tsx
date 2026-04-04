@@ -65,7 +65,7 @@ export function MovieCard({ movie, matchPercent, reason }: MovieCardProps) {
         {matchPercent !== undefined && matchPercent > 0 && (
           <div
             className="absolute top-2 left-2 text-xs font-bold px-1.5 py-0.5 rounded"
-            style={{ backgroundColor: 'rgba(0,0,0,0.75)', color: '#4ade80' }}
+            style={{ backgroundColor: 'rgba(0,0,0,0.75)', color: 'var(--color-match)' }}
           >
             {matchPercent}% match
           </div>
