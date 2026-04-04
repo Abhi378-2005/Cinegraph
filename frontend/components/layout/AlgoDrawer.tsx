@@ -51,6 +51,87 @@ function SpeedControls({
   );
 }
 
+// ─── Poster helper ────────────────────────────────────────────────────────────
+
+const POSTER_BASE = process.env.NEXT_PUBLIC_TMDB_IMAGE_BASE ?? '';
+
+// ─── SortCard ────────────────────────────────────────────────────────────────
+
+type CardState = 'normal' | 'compare' | 'merge';
+
+function SortCard({
+  rec,
+  cardState,
+}: {
+  rec: Recommendation;
+  cardState: CardState;
+}) {
+  return (
+    <div
+      className="flex flex-col items-center gap-1 flex-shrink-0"
+      style={{ width: '44px' }}
+    >
+      <motion.div
+        layout
+        layoutId={`ms-card-${rec.movie.id}`}
+        animate={{
+          scale: cardState === 'compare' ? 1.1 : 1,
+          boxShadow:
+            cardState === 'compare'
+              ? '0 0 10px rgba(124,58,237,0.8)'
+              : cardState === 'merge'
+              ? '0 0 8px rgba(74,222,128,0.6)'
+              : 'none',
+        }}
+        transition={{ duration: 0.12 }}
+        className="relative rounded overflow-hidden"
+        style={{
+          width: '44px',
+          height: '64px',
+          border:
+            cardState === 'compare'
+              ? '2px solid #7C3AED'
+              : cardState === 'merge'
+              ? '2px solid #4ade80'
+              : '1px solid #333',
+          backgroundColor: 'var(--color-bg-card)',
+        }}
+      >
+        {rec.movie.posterPath && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={`${POSTER_BASE}${rec.movie.posterPath}`}
+            alt={rec.movie.title}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+        )}
+        {/* Score badge */}
+        <div
+          className="absolute top-0.5 right-0.5 rounded px-0.5"
+          style={{
+            background: 'rgba(0,0,0,0.85)',
+            color: '#a78bfa',
+            fontSize: '8px',
+            lineHeight: '14px',
+          }}
+        >
+          {rec.score.toFixed(1)}
+        </div>
+      </motion.div>
+      <span
+        className="truncate text-center block"
+        style={{
+          fontSize: '9px',
+          color: cardState === 'compare' ? '#a78bfa' : '#555',
+          width: '44px',
+        }}
+      >
+        {rec.movie.title}
+      </span>
+    </div>
+  );
+}
+
 // ─── MergeSort panel (placeholder — viz added in Task 8) ─────────────────────
 
 interface MergeSortPanelProps {
@@ -74,24 +155,77 @@ function MergeSortPanel({
   replaySpeedMs,
   onSpeedChange,
 }: MergeSortPanelProps) {
-  return (
-    <div className="p-4 flex flex-col gap-3 h-full">
-      <p className="text-sm font-semibold" style={{ color: 'var(--color-brand)' }}>
-        Merge Sort — Recommendation Ranking
-      </p>
-      {!currentStep ? (
+  if (!currentStep) {
+    return (
+      <div className="p-4">
+        <p className="text-sm font-semibold mb-2" style={{ color: 'var(--color-brand)' }}>
+          Merge Sort — Recommendation Ranking
+        </p>
         <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
           Sorts recommendations by predicted score (O(n log n)).
           Steps appear here when the engine runs.
         </p>
-      ) : (
-        <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-          Step {replayIndex} / {totalSteps} — type: <span style={{ color: 'var(--color-brand)' }}>{currentStep.type}</span>
-        </p>
-      )}
-      <div className="mt-auto flex items-center gap-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-        <span className="tabular-nums">{replayIndex} / {totalSteps}</span>
-        <span style={{ color: replayDone ? '#4ade80' : 'var(--color-brand)' }}>
+      </div>
+    );
+  }
+
+  const items = currentStep.array;
+
+  return (
+    <div className="p-4 flex flex-col gap-3">
+      <p className="text-sm font-semibold" style={{ color: 'var(--color-brand)' }}>
+        Merge Sort — Recommendation Ranking
+      </p>
+
+      {/* Animated card row */}
+      <div className="overflow-x-auto">
+        <motion.div
+          layout
+          className="flex gap-2 pb-1"
+          style={{ minWidth: 'max-content' }}
+        >
+          {items.map((rec, idx) => {
+            const isCompare =
+              currentStep.type === 'compare' &&
+              (idx === currentStep.leftIndex || idx === currentStep.rightIndex);
+            const isMerge =
+              currentStep.type === 'merge' &&
+              idx >= currentStep.leftIndex &&
+              idx <= currentStep.rightIndex;
+            return (
+              <SortCard
+                key={rec.movie.id}
+                rec={rec}
+                cardState={isCompare ? 'compare' : isMerge ? 'merge' : 'normal'}
+              />
+            );
+          })}
+        </motion.div>
+      </div>
+
+      {/* Step description */}
+      <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+        {currentStep.type === 'compare' &&
+          `Comparing positions ${currentStep.leftIndex} and ${currentStep.rightIndex}`}
+        {currentStep.type === 'place' &&
+          `Placing item at position ${currentStep.leftIndex}`}
+        {currentStep.type === 'split' &&
+          `Splitting subarray [${currentStep.leftIndex}…${currentStep.rightIndex}]`}
+        {currentStep.type === 'merge' &&
+          `Merging into positions [${currentStep.leftIndex}…${currentStep.rightIndex}]`}
+      </p>
+
+      {/* Footer */}
+      <div
+        className="flex items-center gap-3 text-xs"
+        style={{ color: 'var(--color-text-muted)' }}
+      >
+        <span className="tabular-nums">
+          step {replayIndex} / {totalSteps}
+        </span>
+        <span
+          style={{ color: replayDone ? '#4ade80' : 'var(--color-brand)' }}
+        >
           {replayDone ? 'Complete ✓' : isReplaying ? 'Sorting…' : ''}
         </span>
         <div className="ml-auto flex items-center gap-2">
@@ -104,7 +238,10 @@ function MergeSortPanel({
               ▶ Replay
             </button>
           )}
-          <SpeedControls replaySpeedMs={replaySpeedMs} onSpeedChange={onSpeedChange} />
+          <SpeedControls
+            replaySpeedMs={replaySpeedMs}
+            onSpeedChange={onSpeedChange}
+          />
         </div>
       </div>
     </div>
