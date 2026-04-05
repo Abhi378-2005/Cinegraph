@@ -1,6 +1,7 @@
 import { Server, type Socket } from 'socket.io';
 import type { Server as HTTPServer } from 'http';
 import { setEmitter } from '../routes/recommend';
+import { setGraphEmitter } from '../routes/graph';
 import { dijkstra } from '../algorithms/dijkstra';
 import { getAllUserIds, getUserRatings } from '../redis/ratings';
 import { pearsonCorrelation } from '../ml/pearsonCorrelation';
@@ -103,6 +104,20 @@ export function initSocketServer(httpServer: HTTPServer): void {
     } else {
       // Only warn for meaningful events, not individual steps
       if (event !== 'algo:step') {
+        log.socket(`EMIT MISSED  event=${event}  user=${userId.slice(0, 12)}  — no socket connected`);
+      }
+    }
+  });
+
+  setGraphEmitter((userId: string, event: string, data: unknown) => {
+    const socketId = userSocketMap.get(userId);
+    if (socketId) {
+      if (event !== 'graph:step') {
+        log.socket(`EMIT  event=${event}  user=${userId.slice(0, 12)}  socketId=${socketId}`);
+      }
+      io.to(socketId).emit(event, data);
+    } else {
+      if (event !== 'graph:step') {
         log.socket(`EMIT MISSED  event=${event}  user=${userId.slice(0, 12)}  — no socket connected`);
       }
     }
