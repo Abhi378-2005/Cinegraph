@@ -8,6 +8,8 @@ import type {
   AlgoCompleteEvent,
   RecommendReadyEvent,
   CommunityUpdateEvent,
+  GraphStepEvent,
+  GraphCompleteEvent,
 } from '@/lib/types';
 
 let _socket: Socket | null = null;
@@ -58,6 +60,8 @@ export const socketEvents = {
   onRecommendReady:   (cb: (d: RecommendReadyEvent) => void): Unsubscribe => safeOn('recommend:ready', cb),
   onRecommendError:   (cb: (d: { message: string }) => void): Unsubscribe => safeOn('recommend:error', cb),
   onCommunityUpdate:  (cb: (d: CommunityUpdateEvent) => void): Unsubscribe=> safeOn('community:update', cb),
+  onGraphStep:        (cb: (d: GraphStepEvent) => void): Unsubscribe      => safeOn('graph:step', cb),
+  onGraphComplete:    (cb: (d: GraphCompleteEvent) => void): Unsubscribe  => safeOn('graph:complete', cb),
   emitRecommendStart: (engine: string, budget?: number) => safeEmit('recommend:start', { engine, budget }),
   emitTastePathFind:  (src: string, tgt: string)        => safeEmit('tastepath:find', { sourceUserId: src, targetUserId: tgt }),
   emitSimilarityCompute: (userIds: string[])            => safeEmit('similarity:compute', { userIds }),

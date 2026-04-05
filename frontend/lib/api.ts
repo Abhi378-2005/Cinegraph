@@ -3,6 +3,22 @@
 import { getOrCreateToken } from '@/lib/session';
 import type { Movie, Phase } from '@/lib/types';
 
+export interface RatedMovie {
+  movieId: number;
+  rating: number;
+  title: string;
+  posterPath: string;
+  releaseYear: number;
+  voteAverage: number;
+}
+
+export interface ProfileData {
+  phase: Phase;
+  ratingsCount: number;
+  nextPhaseAt: number | null;
+  ratedMovies: RatedMovie[];
+}
+
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 
 async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -58,5 +74,20 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ engine: 'cold_start', genres }),
     });
+  },
+
+  /** Fetch current user's profile (phase, ratings count, rated movies). */
+  async getProfile(): Promise<ProfileData> {
+    return apiFetch('/profile');
+  },
+
+  /** Triggers graph algorithm computation. Returns a graphSessionId. */
+  async computeGraph(): Promise<{ graphSessionId: string }> {
+    return apiFetch('/graph/compute', { method: 'POST' });
+  },
+
+  /** Fetch top 3 rated movies for a user node (node expansion). */
+  async getTopMovies(userId: string): Promise<{ movies: Array<{ movieId: number; title: string; posterPath: string; rating: number }> }> {
+    return apiFetch(`/profile/${encodeURIComponent(userId)}/top-movies`);
   },
 };
