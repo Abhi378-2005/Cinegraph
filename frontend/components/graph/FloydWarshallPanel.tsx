@@ -15,7 +15,10 @@ interface FloydWarshallPanelProps {
   onSpeedChange: (ms: number) => void;
 }
 
-/** Interpolate between dark navy (0) and brand purple (1). */
+/** Interpolate dark navy (0) → brand purple (1).
+ *  Endpoint rgb(124,58,237) mirrors --color-brand (#7C3AED).
+ *  CSS vars cannot be used for programmatic interpolation, so the value is hardcoded here.
+ */
 function heatColor(value: number): string {
   const v = Math.max(0, Math.min(1, value));
   const r = Math.round(28 + v * (124 - 28));

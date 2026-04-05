@@ -42,7 +42,7 @@ export interface FloydStep {
   k: number; i: number; j: number;
   oldVal: number; newVal: number;
   updated: boolean;
-  matrixSnapshot: number[][];
+  matrixSnapshot?: number[][];
 }
 
 export interface DijkstraStep {
