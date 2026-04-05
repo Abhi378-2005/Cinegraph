@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { socketEvents } from '@/lib/socket';
 import { posterUrl } from '@/lib/formatters';
+import { SpeedControls } from '@/components/layout/SpeedControls';
 import type {
   AlgoStepEvent,
   AlgoCompleteEvent,
@@ -17,35 +18,6 @@ import type {
 // ─── Shared types ─────────────────────────────────────────────────────────────
 
 type DrawerTab = 'mergesort' | 'knapsack' | 'overview';
-
-// ─── Speed controls (shared by both panels) ───────────────────────────────────
-
-function SpeedControls({
-  replaySpeedMs,
-  onSpeedChange,
-}: {
-  replaySpeedMs: number;
-  onSpeedChange: (ms: number) => void;
-}) {
-  return (
-    <div className="flex items-center gap-1">
-      <button
-        onClick={() => onSpeedChange(Math.min(300, replaySpeedMs + 60))}
-        className="px-1.5 py-0.5 rounded text-xs"
-        style={{ backgroundColor: 'var(--color-bg-card)', color: 'var(--color-text-muted)' }}
-      >
-        ◀ slower
-      </button>
-      <button
-        onClick={() => onSpeedChange(Math.max(60, replaySpeedMs - 60))}
-        className="px-1.5 py-0.5 rounded text-xs"
-        style={{ backgroundColor: 'var(--color-bg-card)', color: 'var(--color-text-muted)' }}
-      >
-        faster ▶
-      </button>
-    </div>
-  );
-}
 
 // ─── SortCard ────────────────────────────────────────────────────────────────
 
@@ -336,66 +308,85 @@ function KnapsackPanel({
 
       <AnimatePresence mode="wait">
         {!isPhase2 ? (
-          /* ── Phase 1: DP evaluation rows ── */
+          /* ── Phase 1: DP table ── */
           <motion.div
             key="phase1"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, transition: { duration: 0.6 } }}
-            className="flex flex-col gap-1"
+            className="overflow-x-auto"
           >
-            {forwardSteps.slice(0, ksIndex + 1).map((step, i) => {
-              const movie = recommendations[step.row - 1]?.movie;
-              if (!movie) return null;
-              const proportion = step.value / maxValue;
-              const isActive   = i === ksIndex;
-              return (
-                <motion.div
-                  key={movie.id}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="flex items-center gap-2"
-                >
-                  <span
-                    className="truncate flex-shrink-0 text-xs"
-                    style={{
-                      width: '84px',
-                      color: isActive ? 'var(--color-knapsack)' : 'var(--color-text-secondary)',
-                    }}
-                  >
-                    {movie.title}
-                  </span>
-                  <div
-                    className="flex-1 h-3 rounded overflow-hidden"
-                    style={{ backgroundColor: 'var(--viz-ks-bg)' }}
-                  >
-                    <motion.div
-                      className="h-full rounded"
-                      animate={{ width: `${proportion * 100}%` }}
+            <table className="w-full text-xs border-collapse" style={{ minWidth: '360px' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
+                  <th className="text-left py-1 px-2 font-medium">#</th>
+                  <th className="text-left py-1 px-2 font-medium">Movie</th>
+                  <th className="text-right py-1 px-2 font-medium">Runtime</th>
+                  <th className="text-right py-1 px-2 font-medium">Score</th>
+                  <th className="text-right py-1 px-2 font-medium">dp[i]</th>
+                  <th className="text-center py-1 px-2 font-medium">Decision</th>
+                </tr>
+              </thead>
+              <tbody>
+                {forwardSteps.slice(0, ksIndex + 1).map((step, i) => {
+                  const rec    = recommendations[step.row - 1];
+                  const movie  = rec?.movie;
+                  if (!movie) return null;
+                  const isActive = i === Math.min(ksIndex, forwardSteps.length - 1);
+                  const included = step.decision === 'include';
+                  return (
+                    <motion.tr
+                      key={movie.id}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
                       transition={{ duration: 0.15 }}
                       style={{
-                        backgroundColor: isActive
-                          ? 'var(--color-knapsack)'
-                          : step.decision === 'include'
-                          ? 'var(--color-brand)'
-                          : 'var(--viz-ks-low)',
-                        boxShadow: isActive ? `0 0 6px var(--color-knapsack)` : 'none',
+                        borderBottom: '1px solid rgba(255,255,255,0.04)',
+                        backgroundColor: isActive ? 'rgba(167,139,250,0.08)' : 'transparent',
                       }}
-                    />
-                  </div>
-                  <span
-                    className="flex-shrink-0 text-center"
-                    style={{
-                      width: '14px',
-                      fontSize: '10px',
-                      color: step.decision === 'include' ? 'var(--color-brand)' : 'var(--color-text-muted)',
-                    }}
-                  >
-                    {step.decision === 'include' ? '✓' : '·'}
-                  </span>
-                </motion.div>
-              );
-            })}
+                    >
+                      <td className="py-1 px-2 tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
+                        {step.row}
+                      </td>
+                      <td
+                        className="py-1 px-2 truncate max-w-0"
+                        style={{
+                          width: '120px',
+                          color: isActive ? 'var(--color-knapsack)' : 'var(--color-text-secondary)',
+                          fontWeight: isActive ? 600 : 400,
+                        }}
+                      >
+                        {movie.title}
+                      </td>
+                      <td className="py-1 px-2 text-right tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
+                        {movie.runtime}m
+                      </td>
+                      <td className="py-1 px-2 text-right tabular-nums" style={{ color: 'var(--color-text-secondary)' }}>
+                        {rec.score.toFixed(2)}
+                      </td>
+                      <td
+                        className="py-1 px-2 text-right tabular-nums font-mono"
+                        style={{ color: included ? 'var(--color-match)' : 'var(--color-text-muted)' }}
+                      >
+                        {step.value}
+                      </td>
+                      <td className="py-1 px-2 text-center">
+                        <span
+                          className="inline-block px-1.5 rounded"
+                          style={{
+                            fontSize: '10px',
+                            backgroundColor: included ? 'rgba(74,222,128,0.12)' : 'rgba(255,255,255,0.05)',
+                            color: included ? 'var(--color-match)' : 'var(--color-text-muted)',
+                          }}
+                        >
+                          {included ? '✓ include' : '· skip'}
+                        </span>
+                      </td>
+                    </motion.tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </motion.div>
         ) : (
           /* ── Phase 2: Card selection ── */
