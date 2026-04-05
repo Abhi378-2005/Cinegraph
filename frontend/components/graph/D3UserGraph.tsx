@@ -59,6 +59,8 @@ function communityColor(idx: number): string {
 export function D3UserGraph({
   userIds, similarityMatrix, communities, mstEdges,
   currentUserId, highlight, onNodeClick,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  expandedUserId: _expandedUserId, expandedMovies: _expandedMovies,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -192,7 +194,7 @@ export function D3UserGraph({
 
     return () => { sim.stop(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userIds.join(','), JSON.stringify(mstEdges), communities.length]);
+  }, [userIds.join(','), JSON.stringify(mstEdges), communities.map(g => g.join(',')).join('|')]);
 
   // Apply highlight overlays — separate effect, no simulation restart
   useEffect(() => {
@@ -232,6 +234,15 @@ export function D3UserGraph({
             return resolveCssVar('--color-exclude');
           });
       }
+    }
+
+    if (highlight.algorithm === 'floydWarshall') {
+      // Reset node fills to community colors when Floyd-Warshall is active
+      svg.selectAll<SVGCircleElement, GraphNode>('circle')
+        .attr('fill', d => communityColor(d.communityIdx));
+      // Reset edges to default
+      svg.selectAll<SVGLineElement, SimEdgeLike>('line')
+        .attr('stroke', d => d.isMst ? resolveCssVar('--viz-mst-edge') : resolveCssVar('--viz-node-default'));
     }
   }, [highlight]);
 
