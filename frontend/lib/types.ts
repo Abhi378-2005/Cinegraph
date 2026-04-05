@@ -81,3 +81,19 @@ export interface AlgoStepEvent { sessionId: string; algorithm: string; step: Alg
 export interface AlgoCompleteEvent { sessionId: string; algorithm: string; durationMs: number; totalSteps: number; }
 export interface RecommendReadyEvent { sessionId: string; recommendations: Recommendation[]; engine: string; }
 export interface CommunityUpdateEvent { communities: string[][]; mstEdges: { u: string; v: string }[]; }
+
+export interface GraphStepEvent {
+  graphSessionId: string;
+  algorithm: 'kruskal' | 'dijkstra' | 'floydWarshall';
+  step: MSTStep | DijkstraStep | FloydStep;
+}
+
+export interface GraphCompleteEvent {
+  graphSessionId: string;
+  userIds: string[];
+  similarityMatrix: number[][];
+  mstEdges: Array<{ u: string; v: string; weight: number }>;
+  communities: string[][];
+  dijkstraPath: string[];
+  dijkstraTarget: string;
+}
