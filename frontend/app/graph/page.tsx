@@ -25,7 +25,7 @@ const TAB_LABELS: Record<Tab, string> = {
 
 export default function GraphPage() {
   const graphSessionIdRef = useRef<string | null>(null);
-  const currentUserId = getOrCreateToken();
+  const currentUserIdRef = useRef<string>('');
 
   // ── Step buffers (refs = no re-renders during streaming) ──
   const kruskalStepsRef  = useRef<MSTStep[]>([]);
@@ -75,6 +75,7 @@ export default function GraphPage() {
 
   // ── Socket subscription (mount only) ──
   useEffect(() => {
+    currentUserIdRef.current = getOrCreateToken();
     const offStep = socketEvents.onGraphStep((event: GraphStepEvent) => {
       if (event.graphSessionId !== graphSessionIdRef.current) return;
       if (event.algorithm === 'kruskal')       kruskalStepsRef.current.push(event.step as MSTStep);
@@ -194,7 +195,7 @@ export default function GraphPage() {
                   similarityMatrix={graphData.similarityMatrix}
                   communities={graphData.communities}
                   mstEdges={graphData.mstEdges}
-                  currentUserId={currentUserId}
+                  currentUserId={currentUserIdRef.current}
                   highlight={highlight}
                   expandedUserId={expandedUserId}
                   expandedMovies={expandedMovies}
@@ -290,7 +291,7 @@ export default function GraphPage() {
                   index={dIndex}
                   replaySpeedMs={dSpeed}
                   finalPath={graphData?.dijkstraPath ?? []}
-                  sourceUserId={currentUserId}
+                  sourceUserId={currentUserIdRef.current}
                   targetUserId={graphData?.dijkstraTarget ?? ''}
                   onPlay={() => { if (dIndex >= dTotalSteps) setDIndex(0); setDPlaying(true); }}
                   onPause={() => setDPlaying(false)}
