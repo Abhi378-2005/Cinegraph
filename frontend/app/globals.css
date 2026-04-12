@@ -82,3 +82,38 @@ body {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* ── Architecture page: node load animation ─────────────────────────────── */
+@keyframes arch-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.react-flow__node {
+  animation: arch-fade-in 0.35s ease both;
+}
+
+/* ── React Flow dark theme overrides ──────────────────────────────────────── */
+.react-flow__attribution { display: none; }
+
+.react-flow__edge-path {
+  transition: opacity 0.2s ease;
+}
+
+.react-flow__controls-button {
+  background-color: var(--color-bg-card) !important;
+  border-color: var(--color-card-border) !important;
+  color: var(--color-text-secondary) !important;
+  fill: var(--color-text-secondary) !important;
+}
+.react-flow__controls-button:hover {
+  background-color: var(--color-bg-elevated) !important;
+}
+
+/* Remove React Flow's default white node background */
+.react-flow__node-component,
+.react-flow__node-layerLabel {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+}
