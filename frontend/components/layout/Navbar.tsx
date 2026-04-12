@@ -24,6 +24,7 @@ const PHASE_COLORS: Record<Phase, string> = {
 const NAV_LINKS = [
   { href: '/discover', label: 'Discover' },
   { href: '/graph', label: 'Graph' },
+  { href: '/architecture', label: 'Architecture' },
 ];
 
 export function Navbar() {
