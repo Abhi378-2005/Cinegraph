@@ -3,21 +3,7 @@
 
 import { Handle, Position, type NodeProps } from 'reactflow';
 import type { NodeData } from '@/components/architecture/data/graphData';
-
-const LAYER_COLORS: Record<string, string> = {
-  user:     '#3B82F6',
-  frontend: '#10B981',
-  backend:  '#7C3AED',
-  data:     '#F59E0B',
-};
-
-// Nodes fade in layer-by-layer on page load via the arch-fade-in keyframe in globals.css
-const LAYER_DELAY: Record<string, string> = {
-  user:     '0ms',
-  frontend: '150ms',
-  backend:  '300ms',
-  data:     '450ms',
-};
+import { LAYER_COLORS, LAYER_DELAY } from './layerColors';
 
 export function ComponentNode({ data }: NodeProps<NodeData>) {
   const color    = LAYER_COLORS[data.layer] ?? '#888';
@@ -27,11 +13,13 @@ export function ComponentNode({ data }: NodeProps<NodeData>) {
   return (
     <>
       <Handle
+        id="target-top"
         type="target"
         position={Position.Top}
         style={{ background: color, width: 6, height: 6, border: 'none' }}
       />
       <Handle
+        id="target-left"
         type="target"
         position={Position.Left}
         style={{ background: color, width: 6, height: 6, border: 'none' }}
@@ -72,11 +60,13 @@ export function ComponentNode({ data }: NodeProps<NodeData>) {
         )}
       </div>
       <Handle
+        id="source-bottom"
         type="source"
         position={Position.Bottom}
         style={{ background: color, width: 6, height: 6, border: 'none' }}
       />
       <Handle
+        id="source-right"
         type="source"
         position={Position.Right}
         style={{ background: color, width: 6, height: 6, border: 'none' }}

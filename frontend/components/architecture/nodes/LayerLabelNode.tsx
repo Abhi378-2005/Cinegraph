@@ -3,13 +3,7 @@
 
 import { type NodeProps } from 'reactflow';
 import type { NodeData } from '@/components/architecture/data/graphData';
-
-const LAYER_COLORS: Record<string, string> = {
-  user:     '#3B82F6',
-  frontend: '#10B981',
-  backend:  '#7C3AED',
-  data:     '#F59E0B',
-};
+import { LAYER_COLORS } from './layerColors';
 
 export function LayerLabelNode({ data }: NodeProps<NodeData>) {
   const color = LAYER_COLORS[data.layer] ?? '#888';
