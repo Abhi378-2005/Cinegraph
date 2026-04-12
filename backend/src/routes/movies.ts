@@ -12,7 +12,7 @@ moviesRouter.get('/search', async (req, res) => {
   if (!q) return res.json({ movies: [] });
   try {
     const elapsed = timer();
-    const movies = await searchMovies(q, 20);
+    const movies = await searchMovies(q, '', 20);
     log.http(`search "${q}" → ${movies.length} results  (${elapsed()})`);
     res.json({ movies });
   } catch (err) {

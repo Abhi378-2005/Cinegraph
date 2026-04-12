@@ -1,6 +1,7 @@
 import { redis } from './client';
 import type { Movie } from '../types';
 import { getBQMovie, getBQPopular } from '../bigquery/movies';
+import { searchMoviesBQ, getGenresBQ } from '../bigquery/search';
 import { log, timer } from '../logger';
 
 // Handles both JSON-encoded arrays (new: '["a","b"]') and raw comma strings (old: 'a,b')
@@ -97,48 +98,60 @@ export async function getPopularMovieIds(genre?: string, limit = 50): Promise<nu
   return movies.map(m => m.id);
 }
 
-// KMP-based title search
-function buildLPS(pattern: string): number[] {
-  const lps = new Array<number>(pattern.length).fill(0);
-  let len = 0, i = 1;
-  while (i < pattern.length) {
-    if (pattern[i] === pattern[len]) { lps[i++] = ++len; }
-    else if (len !== 0) { len = lps[len - 1]; }
-    else { lps[i++] = 0; }
-  }
-  return lps;
-}
+export async function searchMovies(
+  query: string,
+  genre = '',
+  limit = 20
+): Promise<Movie[]> {
+  const q = query.toLowerCase().trim();
+  const g = genre.toLowerCase().trim();
+  const key = `search:${q}:${g}`;
 
-function kmpSearch(text: string, pattern: string): boolean {
-  if (pattern.length === 0) return true;
-  const lps = buildLPS(pattern);
-  let i = 0, j = 0;
-  while (i < text.length) {
-    if (text[i] === pattern[j]) { i++; j++; }
-    if (j === pattern.length) return true;
-    else if (i < text.length && text[i] !== pattern[j]) {
-      j !== 0 ? (j = lps[j - 1]) : i++;
+  try {
+    const cached = await redis.get<Movie[]>(key);
+    if (cached) {
+      log.redis(`HIT  ${key} → ${cached.length} results`);
+      return cached;
     }
+  } catch {
+    log.redis(`WARN redis.get(${key}) failed — falling through to BigQuery`);
   }
-  return false;
+
+  log.redis(`MISS ${key} → querying BigQuery`);
+  const elapsed = timer();
+  const movies = await searchMoviesBQ(q, g, limit);
+  log.redis(`BQ   searchMovies("${q}", "${g}") → ${movies.length} results  (${elapsed()})`);
+
+  try {
+    await redis.set(key, movies, { ex: 3600 });
+  } catch {
+    log.redis(`WARN redis.set(${key}) failed — result not cached`);
+  }
+
+  return movies;
 }
 
-export async function searchMovies(query: string, limit = 20): Promise<Movie[]> {
-  const elapsed = timer();
-  const titles = await redis.hgetall<Record<string, string>>('movies:titles');
-  if (!titles) {
-    log.redis(`searchMovies("${query}") → movies:titles is empty`);
-    return [];
+export async function getGenres(): Promise<string[]> {
+  const key = 'movies:genres';
+
+  try {
+    const cached = await redis.get<string[]>(key);
+    if (cached) {
+      log.redis(`HIT  ${key} → ${cached.length} genres`);
+      return cached;
+    }
+  } catch {
+    log.redis(`WARN redis.get(${key}) failed — falling through to BigQuery`);
   }
 
-  const q = query.toLowerCase();
-  const matchingIds: number[] = [];
-  for (const [id, title] of Object.entries(titles)) {
-    if (matchingIds.length >= limit) break;
-    if (kmpSearch(title.toLowerCase(), q)) matchingIds.push(Number(id));
+  log.redis(`MISS ${key} → querying BigQuery`);
+  const genres = await getGenresBQ();
+
+  try {
+    await redis.set(key, genres, { ex: 86400 });
+  } catch {
+    log.redis(`WARN redis.set(${key}) failed — genres not cached`);
   }
 
-  log.redis(`searchMovies("${query}") → ${matchingIds.length} matches from ${Object.keys(titles).length} titles  (${elapsed()})`);
-  const movies = await Promise.all(matchingIds.map(id => getMovie(id)));
-  return movies.filter((m): m is Movie => m !== null);
+  return genres;
 }
