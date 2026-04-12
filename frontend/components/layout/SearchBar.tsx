@@ -19,6 +19,7 @@ export function SearchBar() {
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchGenRef = useRef(0);
 
   // Fetch genre list once when search bar first opens
   useEffect(() => {
@@ -31,6 +32,14 @@ export function SearchBar() {
     if (isExpanded) inputRef.current?.focus();
   }, [isExpanded]);
 
+  const collapse = useCallback(() => {
+    setIsExpanded(false);
+    setQuery('');
+    setGenre('');
+    setResults([]);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+  }, []);
+
   // Collapse on outside click
   useEffect(() => {
     function handleMouseDown(e: MouseEvent) {
@@ -40,15 +49,7 @@ export function SearchBar() {
     }
     document.addEventListener('mousedown', handleMouseDown);
     return () => document.removeEventListener('mousedown', handleMouseDown);
-  }, []);
-
-  function collapse() {
-    setIsExpanded(false);
-    setQuery('');
-    setGenre('');
-    setResults([]);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-  }
+  }, [collapse]);
 
   const triggerSearch = useCallback((q: string, g: string) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -60,13 +61,16 @@ export function SearchBar() {
     setLoading(true);
     setError(false);
     debounceRef.current = setTimeout(async () => {
+      const gen = ++searchGenRef.current;
       try {
         const { movies } = await api.searchMovies(q, g);
+        if (gen !== searchGenRef.current) return;
         setResults(movies.slice(0, 8));
       } catch {
+        if (gen !== searchGenRef.current) return;
         setError(true);
       } finally {
-        setLoading(false);
+        if (gen === searchGenRef.current) setLoading(false);
       }
     }, 400);
   }, []);
