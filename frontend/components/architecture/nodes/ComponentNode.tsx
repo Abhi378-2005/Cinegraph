@@ -35,6 +35,11 @@ export function ComponentNode({ data }: NodeProps<NodeData>) {
           boxShadow: selected ? `0 0 14px ${color}55` : 'none',
           cursor: 'pointer',
           transition: 'border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease',
+          // Staggered fade-in: full animation inline so animationDelay is honoured
+          animationName: 'arch-fade-in',
+          animationDuration: '0.35s',
+          animationTimingFunction: 'ease',
+          animationFillMode: 'both',
           animationDelay: delay,
         }}
       >

@@ -58,7 +58,14 @@ export function AnimatedEdge({
       />
       {/* Travelling dot */}
       <circle r={3} fill={color} opacity={dotOpacity}>
-        <animateMotion dur={animDuration} repeatCount="indefinite" path={edgePath} />
+        <animateMotion
+          dur={animDuration}
+          repeatCount="indefinite"
+          path={edgePath}
+          keyPoints="0;1"
+          keyTimes="0;1"
+          calcMode="linear"
+        />
       </circle>
     </>
   );
