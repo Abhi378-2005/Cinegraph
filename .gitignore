@@ -46,3 +46,11 @@ dist/
 logs/
 *.log
 CLAUDE.md
+.mcp.json
+GEMINI.md
+AGENTS.md
+.claude
+.superpowers
+.cursorrules
+.windsurfrules
+*.txt
