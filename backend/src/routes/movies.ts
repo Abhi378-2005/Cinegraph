@@ -1,19 +1,32 @@
 import { Router } from 'express';
-import { getMovie, searchMovies } from '../redis/movies';
+import { getMovie, searchMovies, getGenres } from '../redis/movies';
 import { getTopSimilar } from '../bigquery/similarity';
 import { log, timer } from '../logger';
 
 export const moviesRouter = Router();
 
-// GET /movies/search?q=<query>
+// GET /movies/genres
+moviesRouter.get('/genres', async (_req, res) => {
+  try {
+    const genres = await getGenres();
+    res.json({ genres });
+  } catch (err) {
+    console.error('Genres error:', err);
+    res.status(500).json({ error: 'Failed to load genres' });
+  }
+});
+
+// GET /movies/search?q=<query>&genre=<genre>
 moviesRouter.get('/search', async (req, res) => {
   const q = String(req.query.q ?? '').trim();
-  log.http(`search  q="${q}"`);
-  if (!q) return res.json({ movies: [] });
+  const genre = String(req.query.genre ?? '').trim();
+  if (!q && !genre) return res.status(400).json({ error: 'Provide q or genre' });
+
+  log.http(`search  q="${q}" genre="${genre}"`);
   try {
     const elapsed = timer();
-    const movies = await searchMovies(q, '', 20);
-    log.http(`search "${q}" → ${movies.length} results  (${elapsed()})`);
+    const movies = await searchMovies(q, genre, 20);
+    log.http(`search "${q}" genre="${genre}" → ${movies.length} results  (${elapsed()})`);
     res.json({ movies });
   } catch (err) {
     console.error('Search error:', err);
