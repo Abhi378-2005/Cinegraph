@@ -4,7 +4,7 @@ import { log, timer } from '../logger';
 
 const DS = `${process.env.GCP_PROJECT_ID ?? 'cinegraph'}.${process.env.GCP_DATASET_ID ?? 'cinegraph'}`;
 
-function rowToMovie(row: Record<string, unknown>): Movie {
+export function rowToMovie(row: Record<string, unknown>): Movie {
   return {
     id:          Number(row.movie_id),
     title:       String(row.title),
