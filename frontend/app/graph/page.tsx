@@ -306,6 +306,7 @@ export default function GraphPage() {
                   index={fIndex}
                   replaySpeedMs={fSpeed}
                   userIds={graphData?.userIds ?? []}
+                  currentUserId={currentUserIdRef.current}
                   onPlay={() => { if (fIndex >= fTotalSteps) setFIndex(0); setFPlaying(true); }}
                   onPause={() => setFPlaying(false)}
                   onSpeedChange={setFSpeed}
