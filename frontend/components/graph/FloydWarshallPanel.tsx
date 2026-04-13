@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import { SpeedControls } from '@/components/layout/SpeedControls';
 import type { FloydStep } from '@/lib/types';
 
@@ -31,6 +32,12 @@ export function FloydWarshallPanel({
   steps, totalSteps, playing, index, replaySpeedMs,
   userIds, onPlay, onPause, onSpeedChange,
 }: FloydWarshallPanelProps) {
+  const initialMatrixRef = useRef<number[][] | null>(null);
+  const prevSnapshotRef  = useRef<number[][] | null>(null);
+  const [biggestUpdate, setBiggestUpdate] = useState<{
+    i: number; j: number; k: number; delta: number;
+  } | null>(null);
+
   // Find the most recent snapshot step at or before current index
   const snapshotStep = [...steps.slice(0, index)]
     .reverse()
@@ -40,6 +47,36 @@ export function FloydWarshallPanel({
   const currentStep = steps[index - 1] ?? null;
   const progress = totalSteps > 0 ? Math.round((index / totalSteps) * 100) : 0;
   const n = userIds.length;
+
+  useEffect(() => {
+    if (!snapshotStep?.matrixSnapshot) return;
+    const snap = snapshotStep.matrixSnapshot;
+
+    // Store the very first snapshot as the initial baseline
+    if (!initialMatrixRef.current) {
+      initialMatrixRef.current = snap.map(row => [...row]);
+    }
+
+    // Diff against previous snapshot to find the biggest single-step gain
+    const prev = prevSnapshotRef.current;
+    if (prev) {
+      let maxDelta = 0;
+      let best: { i: number; j: number; k: number; delta: number } | null = null;
+      for (let i = 0; i < snap.length; i++) {
+        for (let j = 0; j < snap[i].length; j++) {
+          if (i === j) continue;
+          const delta = snap[i][j] - (prev[i]?.[j] ?? 0);
+          if (delta > maxDelta) {
+            maxDelta = delta;
+            best = { i, j, k: snapshotStep.k, delta };
+          }
+        }
+      }
+      if (best) setBiggestUpdate(best);
+    }
+
+    prevSnapshotRef.current = snap.map(row => [...row]);
+  }, [snapshotStep]);
 
   return (
     <div className="flex flex-col gap-3 h-full">
@@ -93,6 +130,9 @@ export function FloydWarshallPanel({
             {matrix.map((row, i) =>
               row.map((val, j) => {
                 const isActive = currentStep && currentStep.i === i && currentStep.j === j;
+                const isKRow   = currentStep != null && i === currentStep.k;
+                const isKCol   = currentStep != null && j === currentStep.k;
+                const isKDiag  = isKRow && isKCol;
                 return (
                   <div
                     key={`${i}-${j}`}
@@ -101,7 +141,14 @@ export function FloydWarshallPanel({
                       aspectRatio: '1',
                       backgroundColor: heatColor(val),
                       borderRadius: 2,
-                      outline: isActive ? '2px solid var(--color-brand-bright)' : 'none',
+                      boxShadow: (isKRow || isKCol) && !isKDiag
+                        ? 'inset 0 0 0 100px rgba(124,58,237,0.28)'
+                        : 'none',
+                      outline: isKDiag
+                        ? '2px solid white'
+                        : isActive
+                        ? '2px solid var(--color-brand-bright)'
+                        : 'none',
                       transition: 'background-color 0.2s',
                     }}
                   />
@@ -109,6 +156,21 @@ export function FloydWarshallPanel({
               })
             )}
           </div>
+          {biggestUpdate && (
+            <div
+              className="mt-2 rounded px-2 py-1 text-xs"
+              style={{
+                backgroundColor: 'rgba(167,139,250,0.1)',
+                border: '1px solid rgba(167,139,250,0.25)',
+                color: 'var(--color-knapsack)',
+              }}
+            >
+              Biggest update: {userIds[biggestUpdate.i]?.slice(0, 8)} ↔ {userIds[biggestUpdate.j]?.slice(0, 8)}
+              {' '}
+              <span style={{ color: 'var(--color-match)' }}>+{biggestUpdate.delta.toFixed(3)}</span>
+              {' '}via {userIds[biggestUpdate.k]?.slice(0, 8)}
+            </div>
+          )}
           <p className="text-xs mt-2 text-center" style={{ color: 'var(--color-text-muted)' }}>
             Indirect similarity matrix ({n}×{n}) · dark = 0 · purple = 1
           </p>
