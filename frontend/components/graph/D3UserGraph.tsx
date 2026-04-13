@@ -102,6 +102,18 @@ export function D3UserGraph({
 
     svg.selectAll('*').remove();
 
+    svg.append('style').text(`
+  @keyframes pulseRing {
+    0%   { opacity: 0.7; transform: scale(1); }
+    100% { opacity: 0;   transform: scale(1.8); }
+  }
+  .pulse-ring {
+    animation: pulseRing 1.4s ease-out infinite;
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+`);
+
     const g = svg.append('g');
 
     svg.call(
@@ -165,6 +177,16 @@ export function D3UserGraph({
       )
       .on('click', (_event, d) => onNodeClick(d.id));
 
+    // Pulse ring — behind main circle, current user only
+    node.filter(d => d.isCurrent)
+      .append('circle')
+      .attr('class', 'pulse-ring')
+      .attr('r', 16)
+      .attr('fill', 'none')
+      .attr('stroke', resolveCssVar('--color-brand'))
+      .attr('stroke-width', 1.5);
+
+    // Main circles — all nodes
     node.append('circle')
       .attr('r', d => d.isCurrent ? 16 : 12)
       .attr('fill', d => communityColor(d.communityIdx))
@@ -172,13 +194,35 @@ export function D3UserGraph({
       .attr('stroke', d => d.isCurrent ? resolveCssVar('--color-brand-bright') : resolveCssVar('--color-bg-base'))
       .attr('stroke-width', d => d.isCurrent ? 3 : 1.5);
 
-    node.append('text')
+    // Label — non-current nodes: 4-char UUID centred
+    node.filter(d => !d.isCurrent)
+      .append('text')
       .text(d => d.id.slice(0, 4))
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'middle')
       .attr('fill', 'white')
       .attr('font-size', 8)
       .attr('font-weight', '600')
+      .attr('pointer-events', 'none');
+
+    // Label — current user node: "YOU" + UUID below
+    node.filter(d => d.isCurrent)
+      .append('text')
+      .text('YOU')
+      .attr('text-anchor', 'middle')
+      .attr('dy', '-3')
+      .attr('fill', 'white')
+      .attr('font-size', 8)
+      .attr('font-weight', '700')
+      .attr('pointer-events', 'none');
+
+    node.filter(d => d.isCurrent)
+      .append('text')
+      .text(d => d.id.slice(0, 4))
+      .attr('text-anchor', 'middle')
+      .attr('dy', '8')
+      .attr('fill', 'rgba(255,255,255,0.55)')
+      .attr('font-size', 6)
       .attr('pointer-events', 'none');
 
     node.append('title').text(d => d.id);
