@@ -91,7 +91,7 @@ export function FloydWarshallPanel({
 
   // Top-3 indirect matches for current user
   const topMatches: Array<{ j: number; val: number; isIndirect: boolean }> =
-    myIdx >= 0 && finalMatrix
+    myIdx >= 0 && finalMatrix && myIdx < finalMatrix.length
       ? finalMatrix[myIdx]
           .map((val, j) => ({
             j,
@@ -103,25 +103,25 @@ export function FloydWarshallPanel({
           .slice(0, 3)
       : [];
 
-  // All-time biggest gain (initial → final)
-  let improvedPairs = 0;
-  let allTimeBestDelta = 0;
-  let allTimeBestI = -1;
-  let allTimeBestJ = -1;
-  if (finalMatrix && initialMatrix) {
-    finalMatrix.forEach((row, i) => {
-      row.forEach((val, j) => {
-        if (j <= i) return;
-        const delta = val - (initialMatrix[i]?.[j] ?? 0);
-        if (delta > 0.001) improvedPairs++;
-        if (delta > allTimeBestDelta) {
-          allTimeBestDelta = delta;
-          allTimeBestI = i;
-          allTimeBestJ = j;
-        }
+  // All-time biggest gain (initial → final) — memoized to avoid O(N²) scan on every replay tick
+  const { improvedPairs, allTimeBestDelta, allTimeBestI, allTimeBestJ } = useMemo(() => {
+    let improvedPairs = 0, allTimeBestDelta = 0, allTimeBestI = -1, allTimeBestJ = -1;
+    if (finalMatrix && initialMatrix) {
+      finalMatrix.forEach((row, i) => {
+        row.forEach((val, j) => {
+          if (j <= i) return;
+          const delta = val - (initialMatrix[i]?.[j] ?? 0);
+          if (delta > 0.001) improvedPairs++;
+          if (delta > allTimeBestDelta) {
+            allTimeBestDelta = delta;
+            allTimeBestI = i;
+            allTimeBestJ = j;
+          }
+        });
       });
-    });
-  }
+    }
+    return { improvedPairs, allTimeBestDelta, allTimeBestI, allTimeBestJ };
+  }, [finalMatrix, initialMatrix]);
 
   return (
     <div className="flex flex-col gap-3 h-full">
