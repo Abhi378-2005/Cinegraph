@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import { SpeedControls } from '@/components/layout/SpeedControls';
 import type { FloydStep } from '@/lib/types';
 
@@ -32,51 +32,48 @@ export function FloydWarshallPanel({
   steps, totalSteps, playing, index, replaySpeedMs,
   userIds, onPlay, onPause, onSpeedChange,
 }: FloydWarshallPanelProps) {
-  const initialMatrixRef = useRef<number[][] | null>(null);
-  const prevSnapshotRef  = useRef<number[][] | null>(null);
-  const [biggestUpdate, setBiggestUpdate] = useState<{
-    i: number; j: number; k: number; delta: number;
-  } | null>(null);
-
   // Find the most recent snapshot step at or before current index
-  const snapshotStep = [...steps.slice(0, index)]
-    .reverse()
-    .find(s => s.matrixSnapshot !== undefined) ?? null;
+  const snapshotStep = useMemo(
+    () => [...steps.slice(0, index)].reverse().find(s => s.matrixSnapshot !== undefined) ?? null,
+    [steps, index],
+  );
+
+  // Find the snapshot immediately before snapshotStep (for inter-snapshot diff)
+  const prevSnapshotMatrix = useMemo(() => {
+    if (!snapshotStep) return null;
+    const cutoff = steps.indexOf(snapshotStep);
+    if (cutoff <= 0) return null;
+    return (
+      [...steps.slice(0, cutoff)].reverse().find(s => s.matrixSnapshot !== undefined)
+        ?.matrixSnapshot ?? null
+    );
+  }, [steps, snapshotStep]);
 
   const matrix = snapshotStep?.matrixSnapshot ?? null;
   const currentStep = steps[index - 1] ?? null;
   const progress = totalSteps > 0 ? Math.round((index / totalSteps) * 100) : 0;
   const n = userIds.length;
 
-  useEffect(() => {
-    if (!snapshotStep?.matrixSnapshot) return;
+  // Compute biggestUpdate during render from props only — no state, no refs
+  const biggestUpdate = useMemo(() => {
+    if (!snapshotStep?.matrixSnapshot) return null;
     const snap = snapshotStep.matrixSnapshot;
-
-    // Store the very first snapshot as the initial baseline
-    if (!initialMatrixRef.current) {
-      initialMatrixRef.current = snap.map(row => [...row]);
-    }
-
-    // Diff against previous snapshot to find the biggest single-step gain
-    const prev = prevSnapshotRef.current;
-    if (prev) {
-      let maxDelta = 0;
-      let best: { i: number; j: number; k: number; delta: number } | null = null;
-      for (let i = 0; i < snap.length; i++) {
-        for (let j = 0; j < snap[i].length; j++) {
-          if (i === j) continue;
-          const delta = snap[i][j] - (prev[i]?.[j] ?? 0);
-          if (delta > maxDelta) {
-            maxDelta = delta;
-            best = { i, j, k: snapshotStep.k, delta };
-          }
+    const prev = prevSnapshotMatrix;
+    if (!prev) return null;
+    let maxDelta = 0;
+    let best: { i: number; j: number; k: number; delta: number } | null = null;
+    for (let i = 0; i < snap.length; i++) {
+      for (let j = 0; j < snap[i].length; j++) {
+        if (i === j) continue;
+        const delta = snap[i][j] - (prev[i]?.[j] ?? 0);
+        if (delta > maxDelta) {
+          maxDelta = delta;
+          best = { i, j, k: snapshotStep.k, delta };
         }
       }
-      if (best) setBiggestUpdate(best);
     }
-
-    prevSnapshotRef.current = snap.map(row => [...row]);
-  }, [snapshotStep]);
+    return best;
+  }, [snapshotStep, prevSnapshotMatrix]);
 
   return (
     <div className="flex flex-col gap-3 h-full">
