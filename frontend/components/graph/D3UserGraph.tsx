@@ -255,7 +255,7 @@ export function D3UserGraph({
     if (highlight.algorithm === 'dijkstra') {
       const pathSet = new Set(highlight.dijkstraPath);
       const step = highlight.step as DijkstraStep | null;
-      svg.selectAll<SVGCircleElement, GraphNode>('circle')
+      svg.selectAll<SVGCircleElement, GraphNode>('circle:not(.pulse-ring)')
         .attr('fill', d => {
           if (step?.visitedUserId === d.id) return resolveCssVar('--color-brand');
           if (pathSet.has(d.id)) return resolveCssVar('--viz-dijkstra-path');
@@ -282,7 +282,7 @@ export function D3UserGraph({
 
     if (highlight.algorithm === 'floydWarshall') {
       // Reset node fills to community colors when Floyd-Warshall is active
-      svg.selectAll<SVGCircleElement, GraphNode>('circle')
+      svg.selectAll<SVGCircleElement, GraphNode>('circle:not(.pulse-ring)')
         .attr('fill', d => communityColor(d.communityIdx));
       // Reset edges to default
       svg.selectAll<SVGLineElement, SimEdgeLike>('line')
