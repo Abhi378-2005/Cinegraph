@@ -114,6 +114,14 @@ export function D3UserGraph({
   }
 `);
 
+    const defs = svg.append('defs');
+    defs.append('filter')
+      .attr('id', 'dijkstra-glow')
+      .html(
+        '<feGaussianBlur stdDeviation="2.5" result="blur"/>' +
+        '<feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>'
+      );
+
     const g = svg.append('g');
 
     svg.call(
@@ -247,18 +255,63 @@ export function D3UserGraph({
 
     if (!highlight.algorithm) {
       // Reset edges to default colors
-      svg.selectAll<SVGLineElement, GraphEdge>('line')
-        .attr('stroke', d => d.isMst ? resolveCssVar('--viz-mst-edge') : resolveCssVar('--viz-node-default'));
+      svg.selectAll<SVGLineElement, SimEdgeLike>('line')
+        .attr('stroke', d => d.isMst ? resolveCssVar('--viz-mst-edge') : resolveCssVar('--viz-node-default'))
+        .attr('stroke-width', d => d.isMst ? 2.5 : 1)
+        .attr('stroke-opacity', 0.2)
+        .attr('filter', 'none');
       return;
     }
 
     if (highlight.algorithm === 'dijkstra') {
-      const pathSet = new Set(highlight.dijkstraPath);
       const step = highlight.step as DijkstraStep | null;
+      const pathArr = highlight.dijkstraPath;
+
+      // Build set of edge pairs that are on the current path
+      const pathPairSet = new Set<string>();
+      for (let i = 0; i < pathArr.length - 1; i++) {
+        pathPairSet.add(`${pathArr[i]}||${pathArr[i + 1]}`);
+        pathPairSet.add(`${pathArr[i + 1]}||${pathArr[i]}`);
+      }
+      const visitedSet = new Set(pathArr);
+
+      // Recolour edges
+      svg.selectAll<SVGLineElement, SimEdgeLike>('line')
+        .attr('stroke', d => {
+          const su = typeof d.source === 'object' ? (d.source as GraphNode).id : d.source as string;
+          const sv = typeof d.target === 'object' ? (d.target as GraphNode).id : d.target as string;
+          if (pathPairSet.has(`${su}||${sv}`) || pathPairSet.has(`${sv}||${su}`))
+            return resolveCssVar('--viz-dijkstra-path');
+          if (visitedSet.has(su) && visitedSet.has(sv))
+            return resolveCssVar('--color-brand');
+          return resolveCssVar('--viz-node-default');
+        })
+        .attr('stroke-width', d => {
+          const su = typeof d.source === 'object' ? (d.source as GraphNode).id : d.source as string;
+          const sv = typeof d.target === 'object' ? (d.target as GraphNode).id : d.target as string;
+          if (pathPairSet.has(`${su}||${sv}`) || pathPairSet.has(`${sv}||${su}`)) return 3;
+          return (d as { isMst?: boolean }).isMst ? 2.5 : 1;
+        })
+        .attr('stroke-opacity', d => {
+          const su = typeof d.source === 'object' ? (d.source as GraphNode).id : d.source as string;
+          const sv = typeof d.target === 'object' ? (d.target as GraphNode).id : d.target as string;
+          if (pathPairSet.has(`${su}||${sv}`) || pathPairSet.has(`${sv}||${su}`)) return 1;
+          if (visitedSet.has(su) && visitedSet.has(sv)) return 0.55;
+          return 0.12;
+        })
+        .attr('filter', d => {
+          const su = typeof d.source === 'object' ? (d.source as GraphNode).id : d.source as string;
+          const sv = typeof d.target === 'object' ? (d.target as GraphNode).id : d.target as string;
+          return (pathPairSet.has(`${su}||${sv}`) || pathPairSet.has(`${sv}||${su}`))
+            ? 'url(#dijkstra-glow)'
+            : 'none';
+        });
+
+      // Node colouring
       svg.selectAll<SVGCircleElement, GraphNode>('circle:not(.pulse-ring)')
         .attr('fill', d => {
           if (step?.visitedUserId === d.id) return resolveCssVar('--color-brand');
-          if (pathSet.has(d.id)) return resolveCssVar('--viz-dijkstra-path');
+          if (pathArr.includes(d.id)) return resolveCssVar('--viz-dijkstra-path');
           return communityColor(d.communityIdx);
         });
     }
