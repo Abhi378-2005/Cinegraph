@@ -33,20 +33,22 @@ export function FloydWarshallPanel({
   userIds, onPlay, onPause, onSpeedChange,
 }: FloydWarshallPanelProps) {
   // Find the most recent snapshot step at or before current index
-  const snapshotStep = useMemo(
-    () => [...steps.slice(0, index)].reverse().find(s => s.matrixSnapshot !== undefined) ?? null,
-    [steps, index],
-  );
+  const snapshotStep = useMemo(() => {
+    for (let t = index - 1; t >= 0; t--) {
+      if (steps[t].matrixSnapshot !== undefined) return steps[t];
+    }
+    return null;
+  }, [steps, index]);
 
   // Find the snapshot immediately before snapshotStep (for inter-snapshot diff)
   const prevSnapshotMatrix = useMemo(() => {
     if (!snapshotStep) return null;
     const cutoff = steps.indexOf(snapshotStep);
     if (cutoff <= 0) return null;
-    return (
-      [...steps.slice(0, cutoff)].reverse().find(s => s.matrixSnapshot !== undefined)
-        ?.matrixSnapshot ?? null
-    );
+    for (let t = cutoff - 1; t >= 0; t--) {
+      if (steps[t].matrixSnapshot !== undefined) return steps[t].matrixSnapshot ?? null;
+    }
+    return null;
   }, [steps, snapshotStep]);
 
   const matrix = snapshotStep?.matrixSnapshot ?? null;
