@@ -56,6 +56,13 @@ function communityColor(idx: number): string {
   return resolveCssVar(COMMUNITY_COLORS[idx % COMMUNITY_COLORS.length]);
 }
 
+// Type alias for D3-mutated edge nodes (source/target become resolved objects after layout)
+type SimEdgeLike = { source: { id: string } | string; target: { id: string } | string; isMst: boolean };
+
+function edgeEndId(ep: { id: string } | string): string {
+  return typeof ep === 'string' ? ep : ep.id;
+}
+
 export function D3UserGraph({
   userIds, similarityMatrix, communities, mstEdges,
   currentUserId, highlight, onNodeClick,
@@ -352,11 +359,4 @@ export function D3UserGraph({
       style={{ display: 'block', background: 'var(--color-bg-base)' }}
     />
   );
-}
-
-// Type alias for D3-mutated edge nodes (source/target become resolved objects after layout)
-type SimEdgeLike = { source: { id: string } | string; target: { id: string } | string; isMst: boolean };
-
-function edgeEndId(ep: { id: string } | string): string {
-  return typeof ep === 'string' ? ep : ep.id;
 }
