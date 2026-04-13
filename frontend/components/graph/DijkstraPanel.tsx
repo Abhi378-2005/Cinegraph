@@ -1,5 +1,6 @@
 'use client';
 
+import { Fragment } from 'react';
 import { SpeedControls } from '@/components/layout/SpeedControls';
 import type { DijkstraStep } from '@/lib/types';
 
@@ -56,26 +57,42 @@ export function DijkstraPanel({
         <span style={{ color: 'var(--viz-dijkstra-path)' }}>{targetUserId.slice(0, 10)}</span>
       </div>
 
-      {/* Current path chain */}
+      {/* Visual path chain */}
       <div>
         <p className="text-xs mb-1" style={{ color: 'var(--color-text-muted)' }}>Current path</p>
-        <div className="flex flex-wrap gap-1">
-          {pathToShow.map((uid, i) => (
-            <span
-              key={i}
-              className="px-1.5 py-0.5 rounded text-xs font-mono"
-              style={{
-                backgroundColor: 'var(--color-brand)' + '33',
-                color: 'var(--viz-dijkstra-path)',
-                border: '1px solid var(--color-brand)',
-              }}
-            >
-              {uid.slice(0, 8)}
-            </span>
-          ))}
-          {pathToShow.length === 0 && (
-            <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>—</span>
-          )}
+        <div className="overflow-x-auto">
+          <div className="flex items-center gap-1 pb-1" style={{ minWidth: 'max-content' }}>
+            {pathToShow.length === 0 ? (
+              <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>—</span>
+            ) : (
+              pathToShow.map((uid, i) => {
+                const isFirst = i === 0;
+                const isLast  = i === pathToShow.length - 1 && pathToShow.length > 1;
+                return (
+                  <Fragment key={i}>
+                    <span
+                      className="px-2 py-0.5 rounded text-xs font-mono flex-shrink-0"
+                      style={{
+                        backgroundColor: isFirst
+                          ? 'var(--color-brand)'
+                          : isLast
+                          ? 'rgba(74,222,128,0.2)'
+                          : 'rgba(124,58,237,0.35)',
+                        color: isFirst ? 'white' : isLast ? 'var(--color-match)' : 'var(--color-knapsack)',
+                        border: isLast ? '1px solid var(--color-match)' : 'none',
+                        fontWeight: isFirst || isLast ? 700 : 400,
+                      }}
+                    >
+                      {isFirst ? 'YOU' : uid.slice(0, 8)}{isLast ? ' ●' : ''}
+                    </span>
+                    {i < pathToShow.length - 1 && (
+                      <span style={{ color: 'var(--color-match)', fontSize: 14, lineHeight: 1 }}>→</span>
+                    )}
+                  </Fragment>
+                );
+              })
+            )}
+          </div>
         </div>
       </div>
 
@@ -99,12 +116,37 @@ export function DijkstraPanel({
         </div>
       </div>
 
-      {/* Visited node */}
-      {currentStep && (
-        <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-          Visiting: <span style={{ color: 'var(--color-brand)' }}>{currentStep.visitedUserId.slice(0, 12)}</span>
-          {' '}(dist: {currentStep.distance === Infinity ? '∞' : currentStep.distance.toFixed(3)})
+      {/* Similarity distance bar + visiting label */}
+      {currentStep && currentStep.distance !== Infinity && (
+        <div className="flex flex-col gap-1">
+          <div className="flex justify-between text-xs" style={{ color: 'var(--color-text-muted)' }}>
+            <span>distance: {currentStep.distance.toFixed(3)}</span>
+            <span style={{ color: 'var(--color-match)' }}>
+              similarity: {Math.round((1 - Math.min(1, currentStep.distance)) * 100)}%
+            </span>
+          </div>
+          <div
+            className="rounded overflow-hidden"
+            style={{ height: 6, backgroundColor: 'rgba(255,255,255,0.08)' }}
+          >
+            <div
+              className="h-full rounded transition-all duration-150"
+              style={{
+                width: `${Math.min(100, currentStep.distance * 100)}%`,
+                background: 'linear-gradient(to right, var(--color-brand), var(--color-match))',
+              }}
+            />
+          </div>
+          <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+            Visiting: <span style={{ color: 'var(--color-brand)' }}>{currentStep.visitedUserId.slice(0, 12)}</span>
+          </p>
         </div>
+      )}
+      {currentStep && currentStep.distance === Infinity && (
+        <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+          Visiting: <span style={{ color: 'var(--color-brand)' }}>{currentStep.visitedUserId.slice(0, 12)}</span>
+          {' '}(unreachable)
+        </p>
       )}
     </div>
   );
