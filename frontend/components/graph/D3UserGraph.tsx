@@ -275,36 +275,37 @@ export function D3UserGraph({
       }
       const visitedSet = new Set(pathArr);
 
-      // Recolour edges
+      // Pre-classify each edge once to avoid repeated su/sv extraction per attr call
+      type EdgeTier = 'path' | 'explored' | 'dim';
+      const edgeTier = new Map<SVGLineElement, EdgeTier>();
       svg.selectAll<SVGLineElement, SimEdgeLike>('line')
-        .attr('stroke', d => {
-          const su = typeof d.source === 'object' ? (d.source as GraphNode).id : d.source as string;
-          const sv = typeof d.target === 'object' ? (d.target as GraphNode).id : d.target as string;
-          if (pathPairSet.has(`${su}||${sv}`) || pathPairSet.has(`${sv}||${su}`))
-            return resolveCssVar('--viz-dijkstra-path');
-          if (visitedSet.has(su) && visitedSet.has(sv))
-            return resolveCssVar('--color-brand');
+        .each(function(d) {
+          const su = edgeEndId(d.source);
+          const sv = edgeEndId(d.target);
+          const onPath = pathPairSet.has(`${su}||${sv}`) || pathPairSet.has(`${sv}||${su}`);
+          const explored = visitedSet.has(su) && visitedSet.has(sv);
+          edgeTier.set(this, onPath ? 'path' : explored ? 'explored' : 'dim');
+        });
+
+      // Recolour edges using pre-classified tiers
+      svg.selectAll<SVGLineElement, SimEdgeLike>('line')
+        .attr('stroke', function(d) {
+          const t = edgeTier.get(this);
+          if (t === 'path')     return resolveCssVar('--viz-dijkstra-path');
+          if (t === 'explored') return resolveCssVar('--color-brand');
           return resolveCssVar('--viz-node-default');
         })
-        .attr('stroke-width', d => {
-          const su = typeof d.source === 'object' ? (d.source as GraphNode).id : d.source as string;
-          const sv = typeof d.target === 'object' ? (d.target as GraphNode).id : d.target as string;
-          if (pathPairSet.has(`${su}||${sv}`) || pathPairSet.has(`${sv}||${su}`)) return 3;
-          return (d as { isMst?: boolean }).isMst ? 2.5 : 1;
+        .attr('stroke-width', function(d) {
+          return edgeTier.get(this) === 'path' ? 3 : (d.isMst ? 2.5 : 1);
         })
-        .attr('stroke-opacity', d => {
-          const su = typeof d.source === 'object' ? (d.source as GraphNode).id : d.source as string;
-          const sv = typeof d.target === 'object' ? (d.target as GraphNode).id : d.target as string;
-          if (pathPairSet.has(`${su}||${sv}`) || pathPairSet.has(`${sv}||${su}`)) return 1;
-          if (visitedSet.has(su) && visitedSet.has(sv)) return 0.55;
+        .attr('stroke-opacity', function() {
+          const t = edgeTier.get(this);
+          if (t === 'path')     return 1;
+          if (t === 'explored') return 0.55;
           return 0.12;
         })
-        .attr('filter', d => {
-          const su = typeof d.source === 'object' ? (d.source as GraphNode).id : d.source as string;
-          const sv = typeof d.target === 'object' ? (d.target as GraphNode).id : d.target as string;
-          return (pathPairSet.has(`${su}||${sv}`) || pathPairSet.has(`${sv}||${su}`))
-            ? 'url(#dijkstra-glow)'
-            : 'none';
+        .attr('filter', function() {
+          return edgeTier.get(this) === 'path' ? 'url(#dijkstra-glow)' : 'none';
         });
 
       // Node colouring
@@ -321,8 +322,8 @@ export function D3UserGraph({
       if (step) {
         svg.selectAll<SVGLineElement, SimEdgeLike>('line')
           .attr('stroke', d => {
-            const su = typeof d.source === 'object' ? (d.source as GraphNode).id : d.source as string;
-            const sv = typeof d.target === 'object' ? (d.target as GraphNode).id : d.target as string;
+            const su = edgeEndId(d.source);
+            const sv = edgeEndId(d.target);
             const matches = (su === step.edge.u && sv === step.edge.v) ||
                             (su === step.edge.v && sv === step.edge.u);
             if (!matches) return d.isMst ? resolveCssVar('--viz-mst-edge') : resolveCssVar('--viz-node-default');
@@ -353,5 +354,9 @@ export function D3UserGraph({
   );
 }
 
-// Type alias for D3-mutated edge nodes (source/target become SimNode after layout)
-type SimEdgeLike = { source: unknown; target: unknown; isMst: boolean };
+// Type alias for D3-mutated edge nodes (source/target become resolved objects after layout)
+type SimEdgeLike = { source: { id: string } | string; target: { id: string } | string; isMst: boolean };
+
+function edgeEndId(ep: { id: string } | string): string {
+  return typeof ep === 'string' ? ep : ep.id;
+}
