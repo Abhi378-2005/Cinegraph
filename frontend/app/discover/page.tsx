@@ -1,7 +1,7 @@
 'use client';
 // frontend/app/discover/page.tsx
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { MovieRow } from '@/components/movies/MovieRow';
 import { EngineSelector } from '@/components/recommendation/EngineSelector';
 import type { Engine } from '@/components/recommendation/EngineSelector';
@@ -10,6 +10,13 @@ import { AlgoDrawer } from '@/components/layout/AlgoDrawer';
 import { api } from '@/lib/api';
 import { socketEvents } from '@/lib/socket';
 import type { Movie, RecommendReadyEvent } from '@/lib/types';
+
+const ENGINE_COLORS: Record<string, string> = {
+  hybrid:        'var(--color-brand)',
+  content:       '#3b82f6',
+  collaborative: '#14b8a6',
+  cold_start:    '#f59e0b',
+};
 
 function groupByGenre(movies: Movie[]): Record<string, Movie[]> {
   const groups: Record<string, Movie[]> = {};
@@ -22,38 +29,110 @@ function groupByGenre(movies: Movie[]): Record<string, Movie[]> {
 }
 
 export default function DiscoverPage() {
-  const [engine, setEngine] = useState<Engine>('hybrid');
-  const [budget, setBudget] = useState(120);
-  const [movies, setMovies] = useState<Movie[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [engine, setEngine]               = useState<Engine>('hybrid');
+  const [budget, setBudget]               = useState<number | undefined>(undefined);
+  const [movies, setMovies]               = useState<Movie[]>([]);
+  const [matchPercents, setMatchPercents] = useState<Record<number, number>>({});
+  const [activeEngine, setActiveEngine]   = useState<string>('');
+  const [loading, setLoading]             = useState(true);
+  const [error, setError]                 = useState(false);
+  const [sessionId, setSessionId]         = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen]       = useState(false);
+
+  // Ref that stays in sync with sessionId state so the stable socket
+  // handler ([] deps) can read the current value without stale closure issues.
+  const sessionIdRef = useRef<string | null>(null);
+
+  // Refs so fetchRecommendations stays stable
+  const engineRef = useRef(engine);
+  const budgetRef = useRef(budget);
+  engineRef.current = engine;
+  budgetRef.current = budget;
+
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchRecommendations = useCallback(async () => {
     setLoading(true);
+    setError(false);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => {
+      setError(true);
+      setLoading(false);
+    }, 30_000);
     try {
-      await api.getRecommendations(engine, budget);
-      // Load mock data immediately as fallback while waiting for socket
-      const mock = await api.getMockMovies();
-      setMovies(mock);
-    } finally {
+      const { sessionId: newId } = await api.getRecommendations(
+        engineRef.current,
+        budgetRef.current,
+      );
+      setSessionId(newId);
+      sessionIdRef.current = newId;
+      // Keep spinner — real data arrives via socket recommend:ready
+    } catch {
+      clearTimeout(timeoutRef.current!);
+      setError(true);
       setLoading(false);
     }
-  }, [engine, budget]);
+  }, []); // stable — reads from refs
 
+  // Fire once on mount
   useEffect(() => {
     fetchRecommendations();
+    return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current); };
   }, [fetchRecommendations]);
 
-  // Listen for real recommendations from backend via Socket.io
+  // Re-fetch when engine or budget changes (skip first render)
+  const isFirstRender = useRef(true);
   useEffect(() => {
-    const unsub = socketEvents.onRecommendReady((event: RecommendReadyEvent) => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    fetchRecommendations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engine, budget]);
+
+  // Socket: handle recommend:ready and recommend:error
+  useEffect(() => {
+    const unsubReady = socketEvents.onRecommendReady((event: RecommendReadyEvent) => {
+      if (event.sessionId !== sessionIdRef.current) return;
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
       setMovies(event.recommendations.map(r => r.movie));
+      const percents: Record<number, number> = {};
+      event.recommendations.forEach(r => { percents[r.movie.id] = r.matchPercent; });
+      setMatchPercents(percents);
+      setActiveEngine(event.engine);
       setLoading(false);
     });
-    return unsub;
+    const unsubError = socketEvents.onRecommendError(() => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      setError(true);
+      setLoading(false);
+    });
+    return () => { unsubReady(); unsubError(); };
   }, []);
 
   const genreGroups = groupByGenre(movies);
-  const topMovies = movies.slice(0, 6);
+  const topMovies   = movies.slice(0, 6);
+
+  const topRowExtras = (
+    <div className="flex items-center gap-2">
+      {activeEngine && (
+        <span
+          className="text-xs px-2 py-0.5 rounded-full font-medium"
+          style={{
+            backgroundColor: ENGINE_COLORS[activeEngine] ?? 'var(--color-brand)',
+            color: 'white',
+          }}
+        >
+          {activeEngine}
+        </span>
+      )}
+      <button
+        onClick={() => setDrawerOpen(true)}
+        className="text-xs"
+        style={{ color: 'var(--color-text-muted)' }}
+      >
+        How were these picked?
+      </button>
+    </div>
+  );
 
   return (
     <main
@@ -74,10 +153,19 @@ export default function DiscoverPage() {
             style={{ borderColor: 'var(--color-brand) transparent transparent transparent' }}
           />
         </div>
+      ) : error ? (
+        <div className="flex items-center justify-center py-24" style={{ color: 'var(--color-text-muted)' }}>
+          <p>Could not load recommendations. Make sure the backend is running.</p>
+        </div>
       ) : (
         <div className="flex flex-col gap-10">
           {topMovies.length > 0 && (
-            <MovieRow title="Recommended For You" movies={topMovies} />
+            <MovieRow
+              title="Recommended For You"
+              movies={topMovies}
+              matchPercents={matchPercents}
+              titleExtras={topRowExtras}
+            />
           )}
           {Object.entries(genreGroups)
             .filter(([, ms]) => ms.length >= 2)
@@ -89,7 +177,12 @@ export default function DiscoverPage() {
       )}
 
       {/* Algorithm drawer pinned at bottom */}
-      <AlgoDrawer />
+      <AlgoDrawer
+        sessionId={sessionId}
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        budgetEnabled={budget !== undefined}
+      />
     </main>
   );
 }

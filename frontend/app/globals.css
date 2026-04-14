@@ -24,10 +24,13 @@
   --color-text-muted:     #6B7280;
 
   /* Semantic */
+  --color-match:          #4ade80;
   --color-match-high:     #A78BFA;
+  --color-knapsack:       #a78bfa;
   --color-star-active:    #F59E0B;
   --color-star-inactive:  #374151;
   --color-border:         rgba(255, 255, 255, 0.08);
+  --color-card-border:    #333;
 
   /* D3 Viz */
   --viz-color-1:          #7C3AED;
@@ -41,6 +44,16 @@
   --viz-dijkstra-path:    #A78BFA;
   --viz-heatmap-low:      #1E1B4B;
   --viz-heatmap-high:     #7C3AED;
+
+  /* Knapsack viz */
+  --viz-ks-bg:            #1a1a2e;
+  --viz-ks-low:           #2d1b69;
+  --color-exclude:        #ef4444;
+
+  /* Component shadows */
+  --shadow-compare:       0 0 10px rgba(124,58,237,0.8);
+  --shadow-merge:         0 0 8px rgba(74,222,128,0.6);
+  --shadow-include:       0 0 8px rgba(74,222,128,0.5);
 }
 
 * {

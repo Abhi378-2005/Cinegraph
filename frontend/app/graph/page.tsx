@@ -1,168 +1,317 @@
 'use client';
-// frontend/app/graph/page.tsx
 
-import { useRef } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { api } from '@/lib/api';
+import { socketEvents } from '@/lib/socket';
+import { posterUrl } from '@/lib/formatters';
+import { getOrCreateToken } from '@/lib/session';
+import { D3UserGraph, type GraphHighlight } from '@/components/graph/D3UserGraph';
+import { KruskalPanel } from '@/components/graph/KruskalPanel';
+import { DijkstraPanel } from '@/components/graph/DijkstraPanel';
+import { FloydWarshallPanel } from '@/components/graph/FloydWarshallPanel';
+import type {
+  MSTStep, DijkstraStep, FloydStep,
+  GraphStepEvent, GraphCompleteEvent,
+} from '@/lib/types';
 
-// Static placeholder nodes with community clusters
-const NODES = [
-  // Action cluster (purple) — top-left
-  { id: 'u1', x: 180, y: 140, community: 0, label: 'User 1' },
-  { id: 'u2', x: 240, y: 100, community: 0, label: 'User 2' },
-  { id: 'u3', x: 150, y: 200, community: 0, label: 'User 3' },
-  { id: 'u4', x: 280, y: 160, community: 0, label: 'User 4' },
-  // Drama cluster (blue) — top-right
-  { id: 'u5', x: 480, y: 120, community: 1, label: 'User 5' },
-  { id: 'u6', x: 540, y: 80,  community: 1, label: 'User 6' },
-  { id: 'u7', x: 510, y: 170, community: 1, label: 'User 7' },
-  { id: 'u8', x: 580, y: 130, community: 1, label: 'User 8' },
-  // Sci-Fi cluster (green) — bottom-left
-  { id: 'u9',  x: 160, y: 360, community: 2, label: 'User 9' },
-  { id: 'u10', x: 220, y: 320, community: 2, label: 'User 10' },
-  { id: 'u11', x: 180, y: 420, community: 2, label: 'User 11' },
-  { id: 'u12', x: 260, y: 390, community: 2, label: 'User 12' },
-  // Horror cluster (amber) — bottom-right
-  { id: 'u13', x: 480, y: 380, community: 3, label: 'User 13' },
-  { id: 'u14', x: 540, y: 330, community: 3, label: 'User 14' },
-  { id: 'u15', x: 560, y: 420, community: 3, label: 'User 15' },
-  { id: 'u16', x: 500, y: 450, community: 3, label: 'User 16' },
-  // Mixed — center bridge nodes
-  { id: 'u17', x: 340, y: 200, community: 4, label: 'User 17' },
-  { id: 'u18', x: 380, y: 280, community: 4, label: 'User 18' },
-  { id: 'u19', x: 340, y: 350, community: 4, label: 'User 19' },
-  { id: 'u20', x: 400, y: 200, community: 4, label: 'User 20' },
-];
+type Tab = 'kruskal' | 'dijkstra' | 'floydWarshall';
 
-const EDGES = [
-  ['u1','u2'], ['u2','u3'], ['u3','u4'], ['u1','u4'],
-  ['u5','u6'], ['u6','u7'], ['u7','u8'], ['u5','u8'],
-  ['u9','u10'], ['u10','u11'], ['u11','u12'], ['u9','u12'],
-  ['u13','u14'], ['u14','u15'], ['u15','u16'], ['u13','u16'],
-  ['u4','u17'], ['u5','u20'], ['u17','u18'], ['u18','u19'],
-  ['u19','u12'], ['u20','u18'],
-];
-
-const COMMUNITY_COLORS = [
-  'var(--viz-color-1)',     // purple
-  'var(--viz-color-2)',     // blue
-  'var(--viz-color-3)',     // green
-  'var(--viz-color-4)',     // amber
-  'var(--viz-node-default)', // grey
-];
-
-const COMMUNITY_LABELS = ['Action', 'Drama', 'Sci-Fi', 'Horror', 'Mixed'];
+const TAB_LABELS: Record<Tab, string> = {
+  kruskal:       'Kruskal MST',
+  dijkstra:      'Dijkstra Path',
+  floydWarshall: 'Floyd-Warshall',
+};
 
 export default function GraphPage() {
-  const svgRef = useRef<SVGSVGElement>(null);
+  const graphSessionIdRef = useRef<string | null>(null);
+  const currentUserIdRef = useRef<string>('');
+
+  // ── Step buffers (refs = no re-renders during streaming) ──
+  const kruskalStepsRef  = useRef<MSTStep[]>([]);
+  const dijkstraStepsRef = useRef<DijkstraStep[]>([]);
+  const floydStepsRef    = useRef<FloydStep[]>([]);
+
+  // ── Graph data (set once on graph:complete) ──
+  const [graphData, setGraphData] = useState<{
+    userIds: string[];
+    similarityMatrix: number[][];
+    mstEdges: Array<{ u: string; v: string; weight: number }>;
+    communities: string[][];
+    dijkstraPath: string[];
+    dijkstraTarget: string;
+  } | null>(null);
+
+  // ── Total steps per algo (enables Play buttons) ──
+  const [kTotalSteps, setKTotalSteps] = useState(0);
+  const [dTotalSteps, setDTotalSteps] = useState(0);
+  const [fTotalSteps, setFTotalSteps] = useState(0);
+
+  // ── Tab + replay state ──
+  const [activeTab, setActiveTab] = useState<Tab>('kruskal');
+
+  const [kPlaying, setKPlaying] = useState(false);
+  const [kIndex,   setKIndex]   = useState(0);
+  const [kSpeed,   setKSpeed]   = useState(120);
+
+  const [dPlaying, setDPlaying] = useState(false);
+  const [dIndex,   setDIndex]   = useState(0);
+  const [dSpeed,   setDSpeed]   = useState(120);
+
+  const [fPlaying, setFPlaying] = useState(false);
+  const [fIndex,   setFIndex]   = useState(0);
+  const [fSpeed,   setFSpeed]   = useState(120);
+
+  // ── D3 highlight state ──
+  const [highlight, setHighlight] = useState<GraphHighlight>({
+    algorithm: null, step: null, dijkstraPath: [],
+  });
+
+  // ── Node expansion ──
+  const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
+  const [expandedMovies, setExpandedMovies] = useState<Array<{
+    movieId: number; title: string; posterPath: string;
+  }>>([]);
+
+  // ── Socket subscription (mount only) ──
+  useEffect(() => {
+    currentUserIdRef.current = getOrCreateToken();
+    const offStep = socketEvents.onGraphStep((event: GraphStepEvent) => {
+      if (event.graphSessionId !== graphSessionIdRef.current) return;
+      if (event.algorithm === 'kruskal')       kruskalStepsRef.current.push(event.step as MSTStep);
+      if (event.algorithm === 'dijkstra')      dijkstraStepsRef.current.push(event.step as DijkstraStep);
+      if (event.algorithm === 'floydWarshall') floydStepsRef.current.push(event.step as FloydStep);
+    });
+
+    const offComplete = socketEvents.onGraphComplete((event: GraphCompleteEvent) => {
+      if (event.graphSessionId !== graphSessionIdRef.current) return;
+      setGraphData({
+        userIds: event.userIds,
+        similarityMatrix: event.similarityMatrix,
+        mstEdges: event.mstEdges,
+        communities: event.communities,
+        dijkstraPath: event.dijkstraPath,
+        dijkstraTarget: event.dijkstraTarget,
+      });
+      setKTotalSteps(kruskalStepsRef.current.length);
+      setDTotalSteps(dijkstraStepsRef.current.length);
+      setFTotalSteps(floydStepsRef.current.length);
+    });
+
+    api.computeGraph()
+      .then(({ graphSessionId }) => { graphSessionIdRef.current = graphSessionId; })
+      .catch(() => { /* backend offline — no-op */ });
+
+    return () => { offStep(); offComplete(); };
+  }, []);
+
+  // ── Kruskal replay engine ──
+  useEffect(() => {
+    if (!kPlaying) return;
+    if (kIndex >= kTotalSteps) { setKPlaying(false); return; }
+    const step = kruskalStepsRef.current[kIndex];
+    if (step) setHighlight({ algorithm: 'kruskal', step, dijkstraPath: [] });
+    const t = setTimeout(() => setKIndex(i => i + 1), kSpeed);
+    return () => clearTimeout(t);
+  }, [kPlaying, kIndex, kTotalSteps, kSpeed]);
+
+  // ── Dijkstra replay engine ──
+  useEffect(() => {
+    if (!dPlaying) return;
+    if (dIndex >= dTotalSteps) { setDPlaying(false); return; }
+    const step = dijkstraStepsRef.current[dIndex];
+    if (step) setHighlight({ algorithm: 'dijkstra', step, dijkstraPath: step.path });
+    const t = setTimeout(() => setDIndex(i => i + 1), dSpeed);
+    return () => clearTimeout(t);
+  }, [dPlaying, dIndex, dTotalSteps, dSpeed]);
+
+  // ── Floyd-Warshall replay engine ──
+  useEffect(() => {
+    if (!fPlaying) return;
+    if (fIndex >= fTotalSteps) { setFPlaying(false); return; }
+    const step = floydStepsRef.current[fIndex];
+    if (step) setHighlight({ algorithm: 'floydWarshall', step, dijkstraPath: [] });
+    const t = setTimeout(() => setFIndex(i => i + 1), fSpeed);
+    return () => clearTimeout(t);
+  }, [fPlaying, fIndex, fTotalSteps, fSpeed]);
+
+  // ── Reset highlight when tab changes ──
+  useEffect(() => {
+    setHighlight({ algorithm: null, step: null, dijkstraPath: [] });
+  }, [activeTab]);
+
+  // ── Node expansion ──
+  const handleNodeClick = useCallback(async (userId: string) => {
+    if (expandedUserId === userId) {
+      setExpandedUserId(null);
+      setExpandedMovies([]);
+      return;
+    }
+    setExpandedUserId(userId);
+    setExpandedMovies([]);
+    try {
+      const { movies } = await api.getTopMovies(userId);
+      setExpandedMovies(movies.map(m => ({
+        movieId: m.movieId,
+        title: m.title,
+        posterPath: m.posterPath,
+      })));
+    } catch { /* no-op */ }
+  }, [expandedUserId]);
 
   return (
-    <main
-      className="min-h-screen pt-16"
-      style={{ backgroundColor: 'var(--color-bg-base)' }}
-    >
+    <main className="min-h-screen pt-16" style={{ backgroundColor: 'var(--color-bg-base)' }}>
       {/* Mobile warning */}
       <div className="lg:hidden flex items-center justify-center min-h-[60vh] px-8 text-center">
         <div>
-          <div className="text-5xl mb-4">🖥️</div>
           <h2 className="text-xl font-bold text-white mb-2">Desktop Only</h2>
           <p style={{ color: 'var(--color-text-secondary)' }}>
-            The Graph Explorer requires a desktop screen for the D3 force layout visualization.
+            The Graph Explorer requires a desktop screen.
           </p>
         </div>
       </div>
 
-      {/* Desktop content */}
-      <div className="hidden lg:block">
+      {/* Desktop layout */}
+      <div className="hidden lg:flex flex-col h-[calc(100vh-64px)]">
         {/* Header */}
-        <div className="px-8 py-6">
+        <div className="px-8 py-4 flex-shrink-0">
           <h1 className="text-2xl font-bold text-white mb-1">User Similarity Graph</h1>
-          <p style={{ color: 'var(--color-text-secondary)' }} className="text-sm">
-            User communities detected via Kruskal&apos;s MST · Taste paths via Dijkstra ·{' '}
-            <span style={{ color: 'var(--color-brand)' }}>
-              Live D3 visualization coming when backend is live
-            </span>
+          <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+            User communities via Kruskal MST · Taste paths via Dijkstra · Similarity propagation via Floyd-Warshall
           </p>
         </div>
 
-        {/* Legend */}
-        <div className="flex flex-wrap gap-4 px-8 mb-6">
-          {COMMUNITY_LABELS.map((label, i) => (
-            <div key={label} className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COMMUNITY_COLORS[i] }} />
-              <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>{label}</span>
-            </div>
-          ))}
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-0.5" style={{ backgroundColor: 'var(--viz-mst-edge)' }} />
-            <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>MST Edge</span>
-          </div>
-        </div>
-
-        {/* Placeholder SVG graph */}
-        <div className="px-8">
+        {/* Main split */}
+        <div className="flex flex-1 min-h-0 px-8 pb-6 gap-4">
+          {/* D3 Graph — left 60% */}
           <div
-            className="rounded-lg overflow-hidden"
-            style={{ backgroundColor: 'var(--color-bg-base)', border: '1px solid var(--color-border)' }}
+            className="flex-[3] rounded-lg overflow-hidden relative"
+            style={{ border: '1px solid var(--color-border)' }}
           >
-            <svg
-              ref={svgRef}
-              width="100%"
-              viewBox="0 0 740 540"
-              style={{ display: 'block' }}
-            >
-              {/* MST edges */}
-              {EDGES.map(([a, b], i) => {
-                const na = NODES.find(n => n.id === a)!;
-                const nb = NODES.find(n => n.id === b)!;
-                return (
-                  <line
-                    key={i}
-                    x1={na.x} y1={na.y} x2={nb.x} y2={nb.y}
-                    stroke="var(--viz-mst-edge)"
-                    strokeWidth="1.5"
-                    strokeOpacity="0.7"
-                  />
-                );
-              })}
+            {graphData ? (
+              <>
+                <D3UserGraph
+                  userIds={graphData.userIds}
+                  similarityMatrix={graphData.similarityMatrix}
+                  communities={graphData.communities}
+                  mstEdges={graphData.mstEdges}
+                  currentUserId={currentUserIdRef.current}
+                  highlight={highlight}
+                  expandedUserId={expandedUserId}
+                  expandedMovies={expandedMovies}
+                  onNodeClick={handleNodeClick}
+                />
+                {/* Expanded node movie thumbnails */}
+                <AnimatePresence>
+                  {expandedUserId && expandedMovies.length > 0 && (
+                    <motion.div
+                      key="expanded"
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 8 }}
+                      className="absolute bottom-4 left-4 flex gap-2"
+                    >
+                      {expandedMovies.map(m => (
+                        <div
+                          key={m.movieId}
+                          className="flex flex-col items-center gap-1"
+                          style={{ width: 56 }}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={posterUrl(m.posterPath)}
+                            alt={m.title}
+                            className="rounded w-full"
+                            style={{ border: '1px solid var(--color-border)' }}
+                          />
+                          <span
+                            className="text-center leading-tight"
+                            style={{ color: 'var(--color-text-muted)', fontSize: 9 }}
+                          >
+                            {m.title.slice(0, 16)}
+                          </span>
+                        </div>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </>
+            ) : (
+              <div
+                className="w-full h-full flex items-center justify-center text-sm"
+                style={{ color: 'var(--color-text-muted)' }}
+              >
+                Computing graph…
+              </div>
+            )}
+          </div>
 
-              {/* Nodes */}
-              {NODES.map(node => (
-                <g key={node.id}>
-                  <circle
-                    cx={node.x}
-                    cy={node.y}
-                    r={14}
-                    fill={COMMUNITY_COLORS[node.community]}
-                    opacity={0.9}
-                    className="cursor-pointer"
-                  >
-                    <title>{`${node.label} · Click for taste path (live when backend is running)`}</title>
-                  </circle>
-                  <text
-                    x={node.x}
-                    y={node.y + 1}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    fill="white"
-                    fontSize="8"
-                    fontWeight="600"
-                    pointerEvents="none"
-                  >
-                    {node.id.replace('u', '')}
-                  </text>
-                </g>
+          {/* Algorithm panels — right 40% */}
+          <div
+            className="flex-[2] flex flex-col rounded-lg overflow-hidden"
+            style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-bg-card)' }}
+          >
+            {/* Tabs */}
+            <div className="flex border-b flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
+              {(Object.keys(TAB_LABELS) as Tab[]).map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className="flex-1 px-3 py-2.5 text-xs font-medium transition-colors"
+                  style={{
+                    color: activeTab === tab ? 'var(--color-brand)' : 'var(--color-text-muted)',
+                    borderBottom: activeTab === tab ? '2px solid var(--color-brand)' : '2px solid transparent',
+                    backgroundColor: 'transparent',
+                  }}
+                >
+                  {TAB_LABELS[tab]}
+                </button>
               ))}
-            </svg>
-          </div>
+            </div>
 
-          {/* Placeholder note */}
-          <div
-            className="mt-4 p-4 rounded text-sm"
-            style={{ backgroundColor: 'var(--color-bg-elevated)', color: 'var(--color-text-secondary)' }}
-          >
-            <strong style={{ color: 'var(--color-brand)' }}>Placeholder visualization.</strong>{' '}
-            When the backend is running, this will become a live D3 force-directed graph with
-            Kruskal&apos;s MST community detection, animated edge building, and Dijkstra taste-path
-            animation on node click.
+            {/* Panel content */}
+            <div className="flex-1 overflow-hidden p-4 min-h-0">
+              {activeTab === 'kruskal' && (
+                <KruskalPanel
+                  steps={kruskalStepsRef.current}
+                  totalSteps={kTotalSteps}
+                  playing={kPlaying}
+                  index={kIndex}
+                  replaySpeedMs={kSpeed}
+                  onPlay={() => { if (kIndex >= kTotalSteps) setKIndex(0); setKPlaying(true); }}
+                  onPause={() => setKPlaying(false)}
+                  onSpeedChange={setKSpeed}
+                />
+              )}
+              {activeTab === 'dijkstra' && (
+                <DijkstraPanel
+                  steps={dijkstraStepsRef.current}
+                  totalSteps={dTotalSteps}
+                  playing={dPlaying}
+                  index={dIndex}
+                  replaySpeedMs={dSpeed}
+                  finalPath={graphData?.dijkstraPath ?? []}
+                  sourceUserId={currentUserIdRef.current}
+                  targetUserId={graphData?.dijkstraTarget ?? ''}
+                  onPlay={() => { if (dIndex >= dTotalSteps) setDIndex(0); setDPlaying(true); }}
+                  onPause={() => setDPlaying(false)}
+                  onSpeedChange={setDSpeed}
+                />
+              )}
+              {activeTab === 'floydWarshall' && (
+                <FloydWarshallPanel
+                  steps={floydStepsRef.current}
+                  totalSteps={fTotalSteps}
+                  playing={fPlaying}
+                  index={fIndex}
+                  replaySpeedMs={fSpeed}
+                  userIds={graphData?.userIds ?? []}
+                  onPlay={() => { if (fIndex >= fTotalSteps) setFIndex(0); setFPlaying(true); }}
+                  onPause={() => setFPlaying(false)}
+                  onSpeedChange={setFSpeed}
+                />
+              )}
+            </div>
           </div>
         </div>
       </div>

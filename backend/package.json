@@ -3,10 +3,43 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "build": "tsc",
+    "start": "node dist/src/index.js",
+    "seed": "ts-node-dev --transpile-only scripts/seedData.ts",
+    "seed:bq": "ts-node --transpile-only scripts/seedFromBQ.ts",
+    "test": "jest",
+    "migrate": "ts-node --transpile-only scripts/migrateToBigQuery.ts",
+    "migrate:resume": "ts-node --transpile-only scripts/migrateToBigQuery.ts --resume",
+    "migrate:similarity-only": "ts-node --transpile-only scripts/migrateToBigQuery.ts --similarity-only",
+    "migrate:enrich-only": "ts-node --transpile-only scripts/migration/enrichMovies.ts",
+    "migrate:clear-bq": "ts-node --transpile-only scripts/clearBQTables.ts",
+    "migrate:dedup": "ts-node --transpile-only scripts/deduplicateBQ.ts",
+    "migrate:validate": "ts-node --transpile-only scripts/validateMigration.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": ""
+  "description": "",
+  "dependencies": {
+    "@google-cloud/bigquery": "^8.1.1",
+    "@upstash/redis": "^1.36.3",
+    "axios": "^1.13.6",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "socket.io": "^4.8.3",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^25.3.3",
+    "jest": "^30.2.0",
+    "ts-jest": "^29.4.6",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.9.3"
+  }
 }

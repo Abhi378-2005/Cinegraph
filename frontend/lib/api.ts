@@ -3,20 +3,23 @@
 import { getOrCreateToken } from '@/lib/session';
 import type { Movie, Phase } from '@/lib/types';
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
-
-let _mockCache: Movie[] | null = null;
-
-async function loadMock(): Promise<Movie[]> {
-  if (_mockCache) return _mockCache;
-  try {
-    const res = await fetch('/mock/movies.json');
-    _mockCache = (await res.json()) as Movie[];
-    return _mockCache;
-  } catch {
-    return [];
-  }
+export interface RatedMovie {
+  movieId: number;
+  rating: number;
+  title: string;
+  posterPath: string;
+  releaseYear: number;
+  voteAverage: number;
 }
+
+export interface ProfileData {
+  phase: Phase;
+  ratingsCount: number;
+  nextPhaseAt: number | null;
+  ratedMovies: RatedMovie[];
+}
+
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
 
 async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getOrCreateToken();
@@ -33,79 +36,58 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
 }
 
 export const api = {
-  /** Returns a socket session ID. Falls back silently to mock. */
+  /** Returns a socket session ID. */
   async getRecommendations(
     engine: string,
     budget?: number
   ): Promise<{ sessionId: string }> {
-    try {
-      return await apiFetch('/recommend', {
-        method: 'POST',
-        body: JSON.stringify({ engine, budget }),
-      });
-    } catch {
-      return { sessionId: 'mock-session' };
-    }
+    return apiFetch('/recommend', {
+      method: 'POST',
+      body: JSON.stringify({ engine, budget }),
+    });
   },
 
-  /** Returns movie + similar list. Falls back to mock JSON. */
+  /** Returns movie + similar list. */
   async getMovie(id: number): Promise<{ movie: Movie; similar: Movie[] }> {
-    try {
-      return await apiFetch(`/movies/${id}`);
-    } catch {
-      const movies = await loadMock();
-      const movie = movies.find(m => m.id === id) ?? movies[0];
-      const similar = movies.filter(m => m.id !== movie.id).slice(0, 6);
-      return { movie, similar };
-    }
+    return apiFetch(`/movies/${id}`);
   },
 
-  /** Full-text search. Falls back to client-side mock filter. */
+  /** Full-text search. */
   async searchMovies(query: string): Promise<{ movies: Movie[] }> {
-    try {
-      return await apiFetch(`/movies/search?q=${encodeURIComponent(query)}`);
-    } catch {
-      const movies = await loadMock();
-      const q = query.toLowerCase();
-      return {
-        movies: movies.filter(
-          m =>
-            m.title.toLowerCase().includes(q) ||
-            m.genres.some(g => g.toLowerCase().includes(q))
-        ),
-      };
-    }
+    return apiFetch(`/movies/search?q=${encodeURIComponent(query)}`);
   },
 
-  /** Rate a movie 1-5. Falls back to cold-phase mock response. */
+  /** Rate a movie 1-5. */
   async rateMovie(
     movieId: number,
     rating: number
   ): Promise<{ newPhase: Phase; ratingsCount: number }> {
-    try {
-      return await apiFetch('/rate', {
-        method: 'POST',
-        body: JSON.stringify({ movieId, rating }),
-      });
-    } catch {
-      return { newPhase: 'cold', ratingsCount: 0 };
-    }
+    return apiFetch('/rate', {
+      method: 'POST',
+      body: JSON.stringify({ movieId, rating }),
+    });
   },
 
-  /** Cold-start: submit genre preferences. Falls back silently. */
+  /** Cold-start: submit genre preferences. */
   async startColdStart(genres: string[]): Promise<{ sessionId: string }> {
-    try {
-      return await apiFetch('/recommend', {
-        method: 'POST',
-        body: JSON.stringify({ engine: 'cold_start', genres }),
-      });
-    } catch {
-      return { sessionId: 'mock-session' };
-    }
+    return apiFetch('/recommend', {
+      method: 'POST',
+      body: JSON.stringify({ engine: 'cold_start', genres }),
+    });
   },
 
-  /** Direct access to mock movies for components that need to populate without a backend. */
-  async getMockMovies(): Promise<Movie[]> {
-    return loadMock();
+  /** Fetch current user's profile (phase, ratings count, rated movies). */
+  async getProfile(): Promise<ProfileData> {
+    return apiFetch('/profile');
+  },
+
+  /** Triggers graph algorithm computation. Returns a graphSessionId. */
+  async computeGraph(): Promise<{ graphSessionId: string }> {
+    return apiFetch('/graph/compute', { method: 'POST' });
+  },
+
+  /** Fetch top 3 rated movies for a user node (node expansion). */
+  async getTopMovies(userId: string): Promise<{ movies: Array<{ movieId: number; title: string; posterPath: string; rating: number }> }> {
+    return apiFetch(`/profile/${encodeURIComponent(userId)}/top-movies`);
   },
 };

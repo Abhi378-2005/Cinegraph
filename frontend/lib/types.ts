@@ -42,7 +42,7 @@ export interface FloydStep {
   k: number; i: number; j: number;
   oldVal: number; newVal: number;
   updated: boolean;
-  matrixSnapshot: number[][];
+  matrixSnapshot?: number[][];
 }
 
 export interface DijkstraStep {
@@ -77,7 +77,23 @@ export interface KnapsackStep {
 
 export type AlgoStep = FloydStep | DijkstraStep | MSTStep | MergeSortStep | KnapsackStep;
 
-export interface AlgoStepEvent { algorithm: string; step: AlgoStep; }
-export interface AlgoCompleteEvent { algorithm: string; durationMs: number; totalSteps: number; }
-export interface RecommendReadyEvent { recommendations: Recommendation[]; engine: string; }
+export interface AlgoStepEvent { sessionId: string; algorithm: string; step: AlgoStep; }
+export interface AlgoCompleteEvent { sessionId: string; algorithm: string; durationMs: number; totalSteps: number; }
+export interface RecommendReadyEvent { sessionId: string; recommendations: Recommendation[]; engine: string; }
 export interface CommunityUpdateEvent { communities: string[][]; mstEdges: { u: string; v: string }[]; }
+
+export interface GraphStepEvent {
+  graphSessionId: string;
+  algorithm: 'kruskal' | 'dijkstra' | 'floydWarshall';
+  step: MSTStep | DijkstraStep | FloydStep;
+}
+
+export interface GraphCompleteEvent {
+  graphSessionId: string;
+  userIds: string[];
+  similarityMatrix: number[][];
+  mstEdges: Array<{ u: string; v: string; weight: number }>;
+  communities: string[][];
+  dijkstraPath: string[];
+  dijkstraTarget: string;
+}
