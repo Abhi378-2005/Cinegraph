@@ -34,12 +34,9 @@ export async function upsertMovies(movies: Movie[]): Promise<void> {
 
   const table = dataset.table(TABLE_NAMES.movies);
   for (const batch of chunk(rows, BATCH)) {
-    // DELETE existing rows for this batch first, then INSERT — true upsert idempotency.
-    // Streaming insert insertId only dedupes within a short window; DELETE+INSERT is
-    // correct for re-runs hours/days later.
-    const ids = batch.map(r => r.movie_id).join(',');
-    await bq.query({ query: `DELETE FROM \`${DS}.${TABLE_NAMES.movies}\` WHERE movie_id IN (${ids})` });
-
+    // Stream-insert rows directly. No per-batch DELETE — BigQuery forbids DML on a table
+    // that has rows in the streaming buffer. Idempotency is handled at the migration level:
+    // fresh runs call clearMigrationTables() and resume runs truncate before re-inserting.
     try {
       await table.insert(
         batch,
