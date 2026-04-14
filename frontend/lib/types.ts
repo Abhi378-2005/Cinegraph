@@ -79,7 +79,7 @@ export type AlgoStep = FloydStep | DijkstraStep | MSTStep | MergeSortStep | Knap
 
 export interface AlgoStepEvent { sessionId: string; algorithm: string; step: AlgoStep; }
 export interface AlgoCompleteEvent { sessionId: string; algorithm: string; durationMs: number; totalSteps: number; }
-export interface RecommendReadyEvent { sessionId: string; recommendations: Recommendation[]; engine: string; }
+export interface RecommendReadyEvent { sessionId: string; recommendations: Recommendation[]; engine: string; vizRecs?: Recommendation[]; }
 export interface CommunityUpdateEvent { communities: string[][]; mstEdges: { u: string; v: string }[]; }
 
 export interface GraphStepEvent {

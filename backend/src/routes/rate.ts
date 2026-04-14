@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { setRating, computeAndSetPhase, getRatingCount } from '../redis/ratings';
+import { upsertRating } from '../bigquery/upsert';
 import { log } from '../logger';
 
 export const rateRouter = Router();
@@ -25,6 +26,11 @@ rateRouter.post('/', async (req, res) => {
     await setRating(userId, movieId, rating);
     const newPhase = await computeAndSetPhase(userId);
     const ratingsCount = await getRatingCount(userId);
+    // Fire-and-forget BQ sync — don't block the response
+    upsertRating(userId, movieId, rating).catch(err => {
+      const detail = err?.message || err?.errors?.[0]?.message || JSON.stringify(err);
+      log.rate(`BQ upsertRating failed (non-fatal): ${detail}`);
+    });
     log.rate(`→ phase=${newPhase}  totalRatings=${ratingsCount}`);
     res.json({ success: true, newPhase, ratingsCount });
   } catch (err) {

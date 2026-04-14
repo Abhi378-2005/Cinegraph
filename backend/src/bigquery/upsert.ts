@@ -64,3 +64,29 @@ export async function upsertMovies(movies: Movie[]): Promise<void> {
   }
   console.log(`Upserted ${rows.length} movies to BigQuery`);
 }
+
+/**
+ * Upserts a single user rating into BigQuery `user_ratings`.
+ * Uses a MERGE so re-rating a movie updates rather than appends.
+ * Called fire-and-forget from the /rate route — errors are swallowed.
+ */
+export async function upsertRating(
+  sessionToken: string,
+  movieId: number,
+  rating: number,
+): Promise<void> {
+  const now = new Date().toISOString();
+  await bq.query({
+    query: `MERGE \`${DS}.${TABLE_NAMES.ratings}\` T
+            USING (SELECT '${sessionToken.replace(/'/g, "\\'")}' AS session_token,
+                          ${movieId} AS movie_id,
+                          ${rating} AS rating,
+                          TIMESTAMP '${now}' AS rated_at) S
+            ON T.session_token = S.session_token AND T.movie_id = S.movie_id
+            WHEN MATCHED THEN
+              UPDATE SET T.rating = S.rating, T.rated_at = S.rated_at
+            WHEN NOT MATCHED THEN
+              INSERT (session_token, movie_id, rating, rated_at)
+              VALUES (S.session_token, S.movie_id, S.rating, S.rated_at)`,
+  });
+}

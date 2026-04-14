@@ -66,7 +66,7 @@ export function MovieRow({ title, movies, matchPercents, titleExtras }: MovieRow
       <div
         ref={scrollRef}
         onScroll={onScroll}
-        className="no-scrollbar flex gap-3 overflow-x-auto px-8 pb-2"
+        className="no-scrollbar flex gap-3 overflow-x-auto px-8 py-4"
         style={{ scrollSnapType: 'x mandatory' }}
       >
         {movies.map(movie => (
