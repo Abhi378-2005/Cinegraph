@@ -4,5 +4,9 @@
       "Bash(npx tsc:*)",
       "Bash(npx jest:*)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "code-review-graph"
+  ],
+  "enableAllProjectMcpServers": true
 }

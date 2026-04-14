@@ -69,54 +69,99 @@ git push origin main
 
 ---
 
-## 2. Backend — VM (Docker)
+## 2. Backend — VM (Podman)
+
+> **Podman note:** All commands use `podman`. It is a drop-in replacement for `docker` — every flag and argument is identical.
 
 ### Requirements on the VM
 
-- Docker 24+
+- Podman 4+
 - At least 512 MB RAM (1 GB recommended)
-- Port 3001 open (or 80/443 with a reverse proxy)
+- Port 3001 open in firewall (or 80/443 with a reverse proxy)
 
-### Build the image
+---
+
+### Step A — Build the image on your dev machine
 
 ```bash
 # From repo root
 cd backend
-docker build -t cinegraph-backend:latest .
+podman build -t cinegraph-backend:latest .
 ```
 
-### Prepare the environment file
+### Step B — Transfer the image to the VM
 
-Create `/opt/cinegraph/.env` on the VM (never commit this file):
+**Option 1 — save/copy/load (no registry needed):**
+
+```bash
+# On dev machine: export the image to a tar file
+podman save cinegraph-backend:latest -o cinegraph-backend.tar
+
+# Copy to VM
+scp cinegraph-backend.tar user@your-vm-ip:/opt/cinegraph/
+
+# On the VM: load the image
+podman load -i /opt/cinegraph/cinegraph-backend.tar
+```
+
+**Option 2 — push to a registry (Docker Hub / GHCR):**
+
+```bash
+# On dev machine
+podman tag cinegraph-backend:latest docker.io/yourusername/cinegraph-backend:latest
+podman push docker.io/yourusername/cinegraph-backend:latest
+
+# On the VM
+podman pull docker.io/yourusername/cinegraph-backend:latest
+podman tag docker.io/yourusername/cinegraph-backend:latest cinegraph-backend:latest
+```
+
+---
+
+### Step C — Prepare files on the VM
+
+**1. Create the env file** at `/opt/cinegraph/.env` (never commit this):
 
 ```env
+# Server
 PORT=3001
 FRONTEND_URL=https://your-vercel-app.vercel.app
 
-UPSTASH_REDIS_REST_URL=https://xxxxx.upstash.io
-UPSTASH_REDIS_REST_TOKEN=xxxxxxxxxxxxxxxx
+# Upstash Redis
+# Get from: https://console.upstash.com → your database → REST API tab
+UPSTASH_REDIS_REST_URL=https://xxxxxxxx.upstash.io
+UPSTASH_REDIS_REST_TOKEN=AXXXXxxxxxxxxxxxxxxxxxxxxxxxxxx
 
-GCP_PROJECT_ID=your-gcp-project
+# Google Cloud / BigQuery
+# Get GCP_PROJECT_ID from: GCP Console → select project → top bar shows "my-project-id"
+GCP_PROJECT_ID=your-gcp-project-id
 GCP_DATASET_ID=cinegraph
 GCP_LOCATION=US
 
-# Path inside the container where the GCP key is mounted
+# Path INSIDE the container where the JSON key will be mounted (do not change this)
 GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/gcp-key.json
 ```
 
-### Prepare the GCP service account key
-
-Copy the key JSON to the VM (never bake it into the image):
+**2. Copy the GCP service account JSON key to the VM** (never bake it into the image):
 
 ```bash
-scp path/to/service-account-key.json user@vm:/opt/cinegraph/gcp-key.json
+# On dev machine — copy key to VM
+scp path/to/your-service-account-key.json user@your-vm-ip:/opt/cinegraph/gcp-key.json
+
+# On the VM — restrict permissions
 chmod 600 /opt/cinegraph/gcp-key.json
 ```
 
-### Run the container
+> **Where to get the JSON key:** GCP Console → IAM & Admin → Service Accounts → select your service account → Keys tab → Add Key → Create new key → JSON. The downloaded file is your key.
+
+> **Required BigQuery roles on the service account:** `BigQuery Data Editor` + `BigQuery Job User` (or `BigQuery Admin` for convenience).
+
+---
+
+### Step D — Run the container
 
 ```bash
-docker run -d \
+podman run -d \
   --name cinegraph-backend \
   --restart unless-stopped \
   -p 3001:3001 \
@@ -125,26 +170,24 @@ docker run -d \
   cinegraph-backend:latest
 ```
 
+> **Custom port:** Change `PORT=3001` in `.env` and update the `-p` flag accordingly (e.g., `-p 8080:8080` with `PORT=8080`).
+
 ### Verify it's healthy
 
 ```bash
 curl http://localhost:3001/health
 # Expected: {"status":"ok","redis":true,"uptime":...}
 
-docker logs cinegraph-backend --tail 50
+podman logs cinegraph-backend --tail 50
 ```
 
-### Update the backend (zero-downtime swap)
+### Update the backend (swap with zero downtime)
 
 ```bash
-# On your dev machine — build and push to a registry, or build directly on VM
-docker build -t cinegraph-backend:latest .
-
-# On the VM
-docker pull cinegraph-backend:latest   # if using a registry
-docker stop cinegraph-backend
-docker rm cinegraph-backend
-docker run -d \
+# Rebuild + re-transfer image (Steps A → B above), then on the VM:
+podman stop cinegraph-backend
+podman rm cinegraph-backend
+podman run -d \
   --name cinegraph-backend \
   --restart unless-stopped \
   -p 3001:3001 \
