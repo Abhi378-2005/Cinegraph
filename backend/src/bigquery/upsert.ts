@@ -42,7 +42,7 @@ export async function upsertMovies(movies: Movie[]): Promise<void> {
 
     try {
       await table.insert(
-        batch.map(row => ({ json: row })),
+        batch,
         { ignoreUnknownValues: true, skipInvalidRows: false },
       );
     } catch (err: unknown) {
