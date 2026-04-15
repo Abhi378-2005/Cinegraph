@@ -243,7 +243,7 @@ cinegraph/
 ### 1 — Clone and install
 
 ```bash
-git clone https://github.com/Tanendra77/CineGraph.git
+git clone https://github.com/Abhi378-2005/Cinegraph.git
 cd CineGraph
 
 cd frontend && npm install && cd ..
