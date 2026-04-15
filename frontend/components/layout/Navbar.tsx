@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { getPhase } from '@/lib/session';
+import { ProfileDrawer } from '@/components/layout/ProfileDrawer';
+import { SearchBar } from '@/components/layout/SearchBar';
 import type { Phase } from '@/lib/types';
 
 const PHASE_LABELS: Record<Phase, string> = {
@@ -22,12 +24,14 @@ const PHASE_COLORS: Record<Phase, string> = {
 const NAV_LINKS = [
   { href: '/discover', label: 'Discover' },
   { href: '/graph', label: 'Graph' },
+  { href: '/architecture', label: 'Architecture' },
 ];
 
 export function Navbar() {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
   const [phase, setPhase] = useState<Phase>('cold');
+  const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => {
     setPhase(getPhase());
@@ -73,20 +77,25 @@ export function Navbar() {
         })}
       </div>
 
-      {/* Right: Phase badge + avatar */}
+      {/* Right: Search + Phase badge + avatar */}
       <div className="flex items-center gap-3">
+        <SearchBar />
         <span
           className={`text-xs font-bold px-2 py-1 rounded ${PHASE_COLORS[phase]} text-white tracking-wider`}
         >
           {PHASE_LABELS[phase]}
         </span>
-        <div
-          className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
+        <button
+          onClick={() => setProfileOpen(true)}
+          className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white transition-opacity hover:opacity-80"
           style={{ backgroundColor: 'var(--color-brand)' }}
+          aria-label="Open profile"
         >
           CG
-        </div>
+        </button>
       </div>
+
+      <ProfileDrawer open={profileOpen} onClose={() => setProfileOpen(false)} />
     </nav>
   );
 }

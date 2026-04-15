@@ -72,7 +72,10 @@ recommendRouter.post('/', async (req, res) => {
       }
 
       log.recommend(`DONE  user=${userId.slice(0, 12)}  finalRecs=${finalRecs.length}  total=${elapsed()}  — emitting recommend:ready`);
-      emitToUser?.(userId, 'recommend:ready', { sessionId, recommendations: finalRecs, engine });
+      // vizRecs = full sorted list so AlgoDrawer can map knapsack step.row → movie.
+      // recommendations = final list shown to the user (post-knapsack when budget used).
+      const vizRecs = budget !== undefined ? sorted : undefined;
+      emitToUser?.(userId, 'recommend:ready', { sessionId, recommendations: finalRecs, engine, vizRecs });
 
       if (!emitToUser) {
         log.recommend(`WARN no emitter set — recommend:ready was not delivered`);

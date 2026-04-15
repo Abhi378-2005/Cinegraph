@@ -52,9 +52,17 @@ export const api = {
     return apiFetch(`/movies/${id}`);
   },
 
-  /** Full-text search. */
-  async searchMovies(query: string): Promise<{ movies: Movie[] }> {
-    return apiFetch(`/movies/search?q=${encodeURIComponent(query)}`);
+  /** Substring title search with optional genre filter. */
+  async searchMovies(query: string, genre = ''): Promise<{ movies: Movie[] }> {
+    const params = new URLSearchParams();
+    if (query) params.set('q', query);
+    if (genre) params.set('genre', genre);
+    return apiFetch(`/movies/search?${params.toString()}`);
+  },
+
+  /** Returns the distinct genre list (cached on backend). */
+  async getGenres(): Promise<{ genres: string[] }> {
+    return apiFetch('/movies/genres');
   },
 
   /** Rate a movie 1-5. */

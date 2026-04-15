@@ -56,6 +56,13 @@ function communityColor(idx: number): string {
   return resolveCssVar(COMMUNITY_COLORS[idx % COMMUNITY_COLORS.length]);
 }
 
+// Type alias for D3-mutated edge nodes (source/target become resolved objects after layout)
+type SimEdgeLike = { source: { id: string } | string; target: { id: string } | string; isMst: boolean };
+
+function edgeEndId(ep: { id: string } | string): string {
+  return typeof ep === 'string' ? ep : ep.id;
+}
+
 export function D3UserGraph({
   userIds, similarityMatrix, communities, mstEdges,
   currentUserId, highlight, onNodeClick,
@@ -101,6 +108,26 @@ export function D3UserGraph({
     const height = svgRef.current.clientHeight || 400;
 
     svg.selectAll('*').remove();
+
+    svg.append('style').text(`
+  @keyframes pulseRing {
+    0%   { opacity: 0.7; transform: scale(1); }
+    100% { opacity: 0;   transform: scale(1.8); }
+  }
+  .pulse-ring {
+    animation: pulseRing 1.4s ease-out infinite;
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+`);
+
+    const defs = svg.append('defs');
+    defs.append('filter')
+      .attr('id', 'dijkstra-glow')
+      .html(
+        '<feGaussianBlur stdDeviation="2.5" result="blur"/>' +
+        '<feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>'
+      );
 
     const g = svg.append('g');
 
@@ -165,6 +192,16 @@ export function D3UserGraph({
       )
       .on('click', (_event, d) => onNodeClick(d.id));
 
+    // Pulse ring — behind main circle, current user only
+    node.filter(d => d.isCurrent)
+      .append('circle')
+      .attr('class', 'pulse-ring')
+      .attr('r', 16)
+      .attr('fill', 'none')
+      .attr('stroke', resolveCssVar('--color-brand'))
+      .attr('stroke-width', 1.5);
+
+    // Main circles — all nodes
     node.append('circle')
       .attr('r', d => d.isCurrent ? 16 : 12)
       .attr('fill', d => communityColor(d.communityIdx))
@@ -172,13 +209,35 @@ export function D3UserGraph({
       .attr('stroke', d => d.isCurrent ? resolveCssVar('--color-brand-bright') : resolveCssVar('--color-bg-base'))
       .attr('stroke-width', d => d.isCurrent ? 3 : 1.5);
 
-    node.append('text')
+    // Label — non-current nodes: 4-char UUID centred
+    node.filter(d => !d.isCurrent)
+      .append('text')
       .text(d => d.id.slice(0, 4))
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'middle')
       .attr('fill', 'white')
       .attr('font-size', 8)
       .attr('font-weight', '600')
+      .attr('pointer-events', 'none');
+
+    // Label — current user node: "YOU" + UUID below
+    node.filter(d => d.isCurrent)
+      .append('text')
+      .text('YOU')
+      .attr('text-anchor', 'middle')
+      .attr('dy', '-3')
+      .attr('fill', 'white')
+      .attr('font-size', 8)
+      .attr('font-weight', '700')
+      .attr('pointer-events', 'none');
+
+    node.filter(d => d.isCurrent)
+      .append('text')
+      .text(d => d.id.slice(0, 4))
+      .attr('text-anchor', 'middle')
+      .attr('dy', '8')
+      .attr('fill', 'rgba(255,255,255,0.55)')
+      .attr('font-size', 6)
       .attr('pointer-events', 'none');
 
     node.append('title').text(d => d.id);
@@ -203,18 +262,64 @@ export function D3UserGraph({
 
     if (!highlight.algorithm) {
       // Reset edges to default colors
-      svg.selectAll<SVGLineElement, GraphEdge>('line')
-        .attr('stroke', d => d.isMst ? resolveCssVar('--viz-mst-edge') : resolveCssVar('--viz-node-default'));
+      svg.selectAll<SVGLineElement, SimEdgeLike>('line')
+        .attr('stroke', d => d.isMst ? resolveCssVar('--viz-mst-edge') : resolveCssVar('--viz-node-default'))
+        .attr('stroke-width', d => d.isMst ? 2.5 : 1)
+        .attr('stroke-opacity', 0.2)
+        .attr('filter', 'none');
       return;
     }
 
     if (highlight.algorithm === 'dijkstra') {
-      const pathSet = new Set(highlight.dijkstraPath);
       const step = highlight.step as DijkstraStep | null;
-      svg.selectAll<SVGCircleElement, GraphNode>('circle')
+      const pathArr = highlight.dijkstraPath;
+
+      // Build set of edge pairs that are on the current path
+      const pathPairSet = new Set<string>();
+      for (let i = 0; i < pathArr.length - 1; i++) {
+        pathPairSet.add(`${pathArr[i]}||${pathArr[i + 1]}`);
+        pathPairSet.add(`${pathArr[i + 1]}||${pathArr[i]}`);
+      }
+      const visitedSet = new Set(pathArr);
+
+      // Pre-classify each edge once to avoid repeated su/sv extraction per attr call
+      type EdgeTier = 'path' | 'explored' | 'dim';
+      const edgeTier = new Map<SVGLineElement, EdgeTier>();
+      svg.selectAll<SVGLineElement, SimEdgeLike>('line')
+        .each(function(d) {
+          const su = edgeEndId(d.source);
+          const sv = edgeEndId(d.target);
+          const onPath = pathPairSet.has(`${su}||${sv}`) || pathPairSet.has(`${sv}||${su}`);
+          const explored = visitedSet.has(su) && visitedSet.has(sv);
+          edgeTier.set(this, onPath ? 'path' : explored ? 'explored' : 'dim');
+        });
+
+      // Recolour edges using pre-classified tiers
+      svg.selectAll<SVGLineElement, SimEdgeLike>('line')
+        .attr('stroke', function(d) {
+          const t = edgeTier.get(this);
+          if (t === 'path')     return resolveCssVar('--viz-dijkstra-path');
+          if (t === 'explored') return resolveCssVar('--color-brand');
+          return resolveCssVar('--viz-node-default');
+        })
+        .attr('stroke-width', function(d) {
+          return edgeTier.get(this) === 'path' ? 3 : (d.isMst ? 2.5 : 1);
+        })
+        .attr('stroke-opacity', function() {
+          const t = edgeTier.get(this);
+          if (t === 'path')     return 1;
+          if (t === 'explored') return 0.55;
+          return 0.12;
+        })
+        .attr('filter', function() {
+          return edgeTier.get(this) === 'path' ? 'url(#dijkstra-glow)' : 'none';
+        });
+
+      // Node colouring
+      svg.selectAll<SVGCircleElement, GraphNode>('circle:not(.pulse-ring)')
         .attr('fill', d => {
           if (step?.visitedUserId === d.id) return resolveCssVar('--color-brand');
-          if (pathSet.has(d.id)) return resolveCssVar('--viz-dijkstra-path');
+          if (pathArr.includes(d.id)) return resolveCssVar('--viz-dijkstra-path');
           return communityColor(d.communityIdx);
         });
     }
@@ -224,8 +329,8 @@ export function D3UserGraph({
       if (step) {
         svg.selectAll<SVGLineElement, SimEdgeLike>('line')
           .attr('stroke', d => {
-            const su = typeof d.source === 'object' ? (d.source as GraphNode).id : d.source as string;
-            const sv = typeof d.target === 'object' ? (d.target as GraphNode).id : d.target as string;
+            const su = edgeEndId(d.source);
+            const sv = edgeEndId(d.target);
             const matches = (su === step.edge.u && sv === step.edge.v) ||
                             (su === step.edge.v && sv === step.edge.u);
             if (!matches) return d.isMst ? resolveCssVar('--viz-mst-edge') : resolveCssVar('--viz-node-default');
@@ -238,7 +343,7 @@ export function D3UserGraph({
 
     if (highlight.algorithm === 'floydWarshall') {
       // Reset node fills to community colors when Floyd-Warshall is active
-      svg.selectAll<SVGCircleElement, GraphNode>('circle')
+      svg.selectAll<SVGCircleElement, GraphNode>('circle:not(.pulse-ring)')
         .attr('fill', d => communityColor(d.communityIdx));
       // Reset edges to default
       svg.selectAll<SVGLineElement, SimEdgeLike>('line')
@@ -255,6 +360,3 @@ export function D3UserGraph({
     />
   );
 }
-
-// Type alias for D3-mutated edge nodes (source/target become SimNode after layout)
-type SimEdgeLike = { source: unknown; target: unknown; isMst: boolean };

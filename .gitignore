@@ -46,3 +46,25 @@ dist/
 logs/
 *.log
 CLAUDE.md
+.mcp.json
+GEMINI.md
+AGENTS.md
+.claude/
+.superpowers/
+.cursorrules
+.windsurfrules
+*.txt
+backend/data
+
+# Claude / AI agent artifacts (plans, specs, scratch files)
+agent/
+docs/plans/
+docs/superpowers/
+info.md
+
+# MCP / IDE tool caches
+.code-review-graph/
+.cursor/
+
+# Docker image tarballs
+*.tar

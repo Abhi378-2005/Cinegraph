@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { useParams } from 'next/navigation';
 import { api } from '@/lib/api';
-import { setPhase } from '@/lib/session';
+import { setPhase, getPhase } from '@/lib/session';
 import { backdropUrl, formatGenres, formatRuntime, formatScore, formatYear, posterUrl } from '@/lib/formatters';
 import { RatingStars } from '@/components/movies/RatingStars';
 import { MovieRow } from '@/components/movies/MovieRow';
@@ -36,9 +36,12 @@ export default function MovieDetailPage() {
   }, [movieId]);
 
   const handleRate = (newPhase: Phase) => {
+    const prevPhase = getPhase();
     setPhase(newPhase);
-    const msg = PHASE_MESSAGES[newPhase];
-    if (msg) setToast(msg);
+    if (newPhase !== prevPhase) {
+      const msg = PHASE_MESSAGES[newPhase];
+      if (msg) setToast(msg);
+    }
   };
 
   if (loading) {

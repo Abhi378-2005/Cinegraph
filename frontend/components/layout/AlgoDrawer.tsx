@@ -232,7 +232,8 @@ function MergeSortPanel({
 interface KnapsackPanelProps {
   currentStep: KnapsackStep | null;
   knapsackSteps: KnapsackStep[];
-  recommendations: Recommendation[];
+  vizRecs: Recommendation[];   // full sorted list — used to map step.row → movie
+  budget?: number;             // budget in minutes for the progress bar
   ksIndex: number;
   ksPlaying: boolean;
   ksDone: boolean;
@@ -245,7 +246,8 @@ interface KnapsackPanelProps {
 function KnapsackPanel({
   currentStep,
   knapsackSteps,
-  recommendations,
+  vizRecs,
+  budget,
   ksIndex,
   ksPlaying,
   ksDone,
@@ -254,17 +256,20 @@ function KnapsackPanel({
   replaySpeedMs,
   onSpeedChange,
 }: KnapsackPanelProps) {
-  const n = recommendations.length;
-  // Forward steps: indices 0..n-1 (one per movie, ascending row)
+  // n = total items knapsack evaluated (full sorted list, NOT the post-selection count)
+  const n = vizRecs.length;
+  // Forward steps: one per movie row (0..n-1), ascending
   const forwardSteps   = knapsackSteps.slice(0, n);
-  // Backtrack steps: indices n..end (descending row, resolves selection)
+  // Backtrack steps: one per movie row (n..end), descending — resolves which are selected
   const backtrackSteps = knapsackSteps.slice(n);
 
   const isPhase2       = ksIndex >= n;
   const backtrackShown = Math.max(0, ksIndex - n);
-  const resolvedCards  = backtrackSteps.slice(0, backtrackShown);
 
-  const maxValue = Math.max(...forwardSteps.map(s => s.value), 1);
+  // Only show movies the algorithm has CONFIRMED as selected (no ✗ noise)
+  const selectedCards = backtrackSteps.slice(0, backtrackShown).filter(s => s.decision === 'include');
+  const totalRuntime  = selectedCards.reduce((acc, s) => acc + (vizRecs[s.row - 1]?.movie.runtime ?? 90), 0);
+  const budgetPct     = budget ? Math.min(100, Math.round((totalRuntime / budget) * 100)) : 0;
 
   if (!currentStep && knapsackSteps.length === 0) {
     return (
@@ -279,12 +284,6 @@ function KnapsackPanel({
       </div>
     );
   }
-
-  const includedCards = resolvedCards.filter(s => s.decision === 'include');
-  const totalRuntime  = includedCards.reduce((acc, s) => {
-    return acc + (recommendations[s.row - 1]?.movie.runtime ?? 90);
-  }, 0);
-  const latestValue   = currentStep?.value ?? 0;
 
   return (
     <div className="p-4 flex flex-col gap-3">
@@ -308,7 +307,7 @@ function KnapsackPanel({
 
       <AnimatePresence mode="wait">
         {!isPhase2 ? (
-          /* ── Phase 1: DP table ── */
+          /* ── Phase 1: DP evaluation table ── */
           <motion.div
             key="phase1"
             initial={{ opacity: 0 }}
@@ -329,7 +328,7 @@ function KnapsackPanel({
               </thead>
               <tbody>
                 {forwardSteps.slice(0, ksIndex + 1).map((step, i) => {
-                  const rec    = recommendations[step.row - 1];
+                  const rec    = vizRecs[step.row - 1];
                   const movie  = rec?.movie;
                   if (!movie) return null;
                   const isActive = i === Math.min(ksIndex, forwardSteps.length - 1);
@@ -389,31 +388,50 @@ function KnapsackPanel({
             </table>
           </motion.div>
         ) : (
-          /* ── Phase 2: Card selection ── */
+          /* ── Phase 2: Backtrack — show only confirmed picks ── */
           <motion.div
             key="phase2"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             className="flex flex-col gap-3"
           >
-            {/* Running total */}
+            {/* Budget bar */}
+            {budget !== undefined && (
+              <div className="flex flex-col gap-1">
+                <div className="flex justify-between text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                  <span>{totalRuntime} min used</span>
+                  <span>{budget} min budget</span>
+                </div>
+                <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                  <motion.div
+                    className="h-full rounded-full"
+                    style={{ backgroundColor: 'var(--color-match)' }}
+                    initial={{ width: 0 }}
+                    animate={{ width: `${budgetPct}%` }}
+                    transition={{ duration: 0.3 }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Selected count */}
             <p className="text-xs" style={{ color: 'var(--color-match)' }}>
-              Selected {includedCards.length} movie
-              {includedCards.length !== 1 ? 's' : ''} · {totalRuntime} min
-              {latestValue > 0 ? ` · score ${latestValue}` : ''}
+              {selectedCards.length > 0
+                ? `${selectedCards.length} movie${selectedCards.length !== 1 ? 's' : ''} selected`
+                : 'Backtracking…'}
             </p>
-            {/* Cards */}
+
+            {/* Only selected movie cards — no ✗ noise */}
             <div className="flex gap-3 flex-wrap">
-              {resolvedCards.map((step, i) => {
-                const rec = recommendations[step.row - 1];
+              {selectedCards.map((step, i) => {
+                const rec = vizRecs[step.row - 1];
                 if (!rec) return null;
-                const included = step.decision === 'include';
                 return (
                   <motion.div
                     key={`ks-card-${rec.movie.id}-${i}`}
-                    initial={{ x: -30, opacity: 0 }}
-                    animate={{ x: 0, opacity: included ? 1 : 0.2 }}
-                    transition={{ duration: 0.25 }}
+                    initial={{ scale: 0.7, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ duration: 0.2 }}
                     className="flex flex-col items-center gap-1"
                     style={{ width: '44px' }}
                   >
@@ -422,8 +440,8 @@ function KnapsackPanel({
                       style={{
                         width: '44px',
                         height: '64px',
-                        border: included ? `2px solid var(--color-match)` : '1px solid var(--color-card-border)',
-                        boxShadow: included ? 'var(--shadow-include)' : 'none',
+                        border: '2px solid var(--color-match)',
+                        boxShadow: 'var(--shadow-include)',
                         backgroundColor: 'var(--color-bg-card)',
                       }}
                     >
@@ -437,16 +455,19 @@ function KnapsackPanel({
                       )}
                     </div>
                     <span
-                      style={{
-                        fontSize: '9px',
-                        color: included ? 'var(--color-match)' : 'var(--color-exclude)',
-                      }}
+                      className="truncate text-center block"
+                      style={{ fontSize: '9px', color: 'var(--color-match)', width: '44px' }}
                     >
-                      {included ? '✓' : '✗'}
+                      {rec.movie.title}
                     </span>
                   </motion.div>
                 );
               })}
+              {selectedCards.length === 0 && (
+                <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                  Checking each movie against remaining budget…
+                </p>
+              )}
             </div>
           </motion.div>
         )}
@@ -496,6 +517,7 @@ interface AlgoDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   budgetEnabled: boolean;
+  budget?: number;
 }
 
 export function AlgoDrawer({
@@ -503,6 +525,7 @@ export function AlgoDrawer({
   open,
   onOpenChange,
   budgetEnabled,
+  budget,
 }: AlgoDrawerProps) {
   const [activeTab, setActiveTab] = useState<DrawerTab>('mergesort');
   const [replaySpeedMs, setReplaySpeedMs] = useState(120);
@@ -521,6 +544,9 @@ export function AlgoDrawer({
   const mergeSortStepsRef  = useRef<MergeSortStep[]>([]);
   const knapsackStepsRef   = useRef<KnapsackStep[]>([]);
   const recommendationsRef = useRef<Recommendation[]>([]);
+  // Full sorted list sent by backend for knapsack viz (step.row → movie mapping).
+  // Separate from recommendationsRef which holds the post-knapsack display list.
+  const vizRecsRef         = useRef<Recommendation[]>([]);
 
   // Ref that stays in sync with sessionId prop so the stable ([] deps) socket
   // handler can read the current value without stale closure issues — same
@@ -536,6 +562,7 @@ export function AlgoDrawer({
     mergeSortStepsRef.current  = [];
     knapsackStepsRef.current   = [];
     recommendationsRef.current = [];
+    vizRecsRef.current         = [];
     setMsIndex(0);
     setMsPlaying(false);
     setMsDone(false);
@@ -574,6 +601,9 @@ export function AlgoDrawer({
     const unsubReady = socketEvents.onRecommendReady((event: RecommendReadyEvent) => {
       if (event.sessionId !== currentSessionIdRef.current) return;
       recommendationsRef.current = event.recommendations;
+      // vizRecs = full sorted list (sent by backend when budget used).
+      // Falls back to recommendations when no knapsack ran (same list anyway).
+      vizRecsRef.current = event.vizRecs ?? event.recommendations;
     });
 
     return () => { unsubStep(); unsubComplete(); unsubReady(); };
@@ -690,7 +720,8 @@ export function AlgoDrawer({
               <KnapsackPanel
                 currentStep={ksIndex > 0 ? (knapsackStepsRef.current[ksIndex - 1] ?? null) : null}
                 knapsackSteps={knapsackStepsRef.current.slice(0, ksTotalSteps)}
-                recommendations={recommendationsRef.current}
+                vizRecs={vizRecsRef.current}
+                budget={budget}
                 ksIndex={ksIndex}
                 ksPlaying={ksPlaying}
                 ksDone={ksDone}

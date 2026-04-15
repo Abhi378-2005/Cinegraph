@@ -182,6 +182,7 @@ export default function DiscoverPage() {
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         budgetEnabled={budget !== undefined}
+        budget={budget}
       />
     </main>
   );

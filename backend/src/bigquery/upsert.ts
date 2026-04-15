@@ -34,15 +34,12 @@ export async function upsertMovies(movies: Movie[]): Promise<void> {
 
   const table = dataset.table(TABLE_NAMES.movies);
   for (const batch of chunk(rows, BATCH)) {
-    // DELETE existing rows for this batch first, then INSERT — true upsert idempotency.
-    // Streaming insert insertId only dedupes within a short window; DELETE+INSERT is
-    // correct for re-runs hours/days later.
-    const ids = batch.map(r => r.movie_id).join(',');
-    await bq.query({ query: `DELETE FROM \`${DS}.${TABLE_NAMES.movies}\` WHERE movie_id IN (${ids})` });
-
+    // Stream-insert rows directly. No per-batch DELETE — BigQuery forbids DML on a table
+    // that has rows in the streaming buffer. Idempotency is handled at the migration level:
+    // fresh runs call clearMigrationTables() and resume runs truncate before re-inserting.
     try {
       await table.insert(
-        batch.map(row => ({ json: row })),
+        batch,
         { ignoreUnknownValues: true, skipInvalidRows: false },
       );
     } catch (err: unknown) {
@@ -63,4 +60,30 @@ export async function upsertMovies(movies: Movie[]): Promise<void> {
     }
   }
   console.log(`Upserted ${rows.length} movies to BigQuery`);
+}
+
+/**
+ * Upserts a single user rating into BigQuery `user_ratings`.
+ * Uses a MERGE so re-rating a movie updates rather than appends.
+ * Called fire-and-forget from the /rate route — errors are swallowed.
+ */
+export async function upsertRating(
+  sessionToken: string,
+  movieId: number,
+  rating: number,
+): Promise<void> {
+  const now = new Date().toISOString();
+  await bq.query({
+    query: `MERGE \`${DS}.${TABLE_NAMES.ratings}\` T
+            USING (SELECT '${sessionToken.replace(/'/g, "\\'")}' AS session_token,
+                          ${movieId} AS movie_id,
+                          ${rating} AS rating,
+                          TIMESTAMP '${now}' AS rated_at) S
+            ON T.session_token = S.session_token AND T.movie_id = S.movie_id
+            WHEN MATCHED THEN
+              UPDATE SET T.rating = S.rating, T.rated_at = S.rated_at
+            WHEN NOT MATCHED THEN
+              INSERT (session_token, movie_id, rating, rated_at)
+              VALUES (S.session_token, S.movie_id, S.rating, S.rated_at)`,
+  });
 }

@@ -2,6 +2,7 @@
 import 'dotenv/config';
 import fs from 'fs';
 import { bq, ensureTables, clearMigrationTables } from '../src/bigquery/client';
+import { TABLE_NAMES } from '../src/bigquery/schema';
 import { upsertMovies } from '../src/bigquery/upsert';
 import { runFeatureVectorJob, runSimilarityJob } from '../src/bigquery/jobs';
 import {
@@ -74,7 +75,7 @@ async function main() {
     if (RESUME) {
       const DS = `${process.env.GCP_PROJECT_ID ?? 'cinegraph'}.${process.env.GCP_DATASET_ID ?? 'cinegraph'}`;
       const [rows] = await bq.query({
-        query: `SELECT COUNT(DISTINCT movie_id) AS cnt, COUNTIF(title IS NULL OR title = '') AS bad_title_cnt FROM \`${DS}.movies\``,
+        query: `SELECT COUNT(DISTINCT movie_id) AS cnt, COUNTIF(title IS NULL OR title = '') AS bad_title_cnt FROM \`${DS}.${TABLE_NAMES.movies}\``,
       });
       const bqCount = Number((rows[0] as Record<string, unknown>).cnt ?? 0);
       const badTitleCount = Number((rows[0] as Record<string, unknown>).bad_title_cnt ?? 0);
@@ -82,10 +83,20 @@ async function main() {
       if (bqCount >= movies.length && badTitleCount === 0) {
         skipUpsert = true;
         logger.info(`Skipping upsert — BigQuery count sufficient and all rows have valid titles.`);
-      } else if (bqCount < movies.length) {
-        logger.info(`Upsert required — BigQuery row count (${bqCount}) is below JSONL count (${movies.length}).`);
       } else {
-        logger.info(`Upsert required — ${badTitleCount} row(s) have null/empty titles (possible PartialFailureError corruption).`);
+        if (bqCount < movies.length) {
+          logger.info(`Upsert required — BigQuery row count (${bqCount}) is below JSONL count (${movies.length}).`);
+        } else {
+          logger.info(`Upsert required — ${badTitleCount} row(s) have null/empty titles (possible prior PartialFailureError).`);
+        }
+        if (bqCount > 0) {
+          // Truncate before re-streaming. BigQuery forbids DML on the streaming buffer, but
+          // rows from a previous run are already in permanent storage (buffer cleared after ~90 min),
+          // so TRUNCATE succeeds here. We must truncate BEFORE starting any new streaming inserts.
+          logger.info(`Truncating movies table before re-insert (${bqCount} stale rows)…`);
+          await bq.query({ query: `TRUNCATE TABLE \`${DS}.${TABLE_NAMES.movies}\`` });
+          logger.info('Truncate complete.');
+        }
       }
     }
     if (!skipUpsert) {
