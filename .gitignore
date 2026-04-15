@@ -62,5 +62,9 @@ docs/plans/
 docs/superpowers/
 info.md
 
+# MCP / IDE tool caches
+.code-review-graph/
+.cursor/
+
 # Docker image tarballs
 *.tar
