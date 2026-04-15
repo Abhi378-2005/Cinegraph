@@ -24,15 +24,18 @@ FROM node:20-alpine AS runtime
 WORKDIR /app
 
 ENV NODE_ENV=production
+# Defaults — override via env_file or -e flags at container start
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
 
 # standalone output includes its own node_modules — no npm install needed
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-EXPOSE 3000
+EXPOSE ${PORT}
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-  CMD wget -qO- http://localhost:3000 || exit 1
+  CMD wget -qO- http://localhost:${PORT} || exit 1
 
 CMD ["node", "server.js"]

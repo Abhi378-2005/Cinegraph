@@ -21,12 +21,14 @@ services:
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
         NEXT_PUBLIC_SOCKET_URL: ${NEXT_PUBLIC_SOCKET_URL}
-        NEXT_PUBLIC_TMDB_IMAGE_BASE: https://image.tmdb.org/t/p/w500
+        NEXT_PUBLIC_TMDB_IMAGE_BASE: ${NEXT_PUBLIC_TMDB_IMAGE_BASE:-https://image.tmdb.org/t/p/w500}
     image: cinegraph-frontend
     container_name: cinegraph-frontend
     restart: unless-stopped
     ports:
       - "3000:3000"
+    env_file:
+      - ./frontend/.env
     depends_on:
       backend:
         condition: service_healthy

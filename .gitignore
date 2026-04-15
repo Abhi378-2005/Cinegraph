@@ -49,9 +49,18 @@ CLAUDE.md
 .mcp.json
 GEMINI.md
 AGENTS.md
-.claude
-.superpowers
+.claude/
+.superpowers/
 .cursorrules
 .windsurfrules
 *.txt
 backend/data
+
+# Claude / AI agent artifacts (plans, specs, scratch files)
+agent/
+docs/plans/
+docs/superpowers/
+info.md
+
+# Docker image tarballs
+*.tar
