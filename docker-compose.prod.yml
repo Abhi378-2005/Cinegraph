@@ -1,18 +1,21 @@
 # Production compose for VM deployment.
 # Images are loaded from tarballs — no build context needed.
 # Run from ~/CineGraph/ alongside backend.env, frontend.env, and gcp-service-account.json.
+#
+# Access the app on port 80. nginx routes:
+#   /socket.io/*      → backend:3001  (WebSocket)
+#   /recommend, /rate, /movies, /similarity, /profile, /health, /graph/compute
+#                     → backend:3001  (REST API)
+#   everything else   → frontend:3000 (Next.js)
 
 services:
   backend:
     image: cinegraph-backend
     container_name: cinegraph-backend
     restart: unless-stopped
-    ports:
-      - "3001:3001"
     env_file:
       - ./backend.env
     volumes:
-      # Mount GCP service account key read-only into the container
       - ./gcp-service-account.json:/app/secrets/gcp-service-account.json:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
@@ -24,8 +27,6 @@ services:
     image: cinegraph-frontend
     container_name: cinegraph-frontend
     restart: unless-stopped
-    ports:
-      - "3000:3000"
     env_file:
       - ./frontend.env
     depends_on:
@@ -36,3 +37,15 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+
+  nginx:
+    image: nginx:alpine
+    container_name: cinegraph-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - frontend
+      - backend
