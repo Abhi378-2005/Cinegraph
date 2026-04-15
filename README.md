@@ -1,8 +1,6 @@
 <div align="center">
 
-# CineGraph
-
-### Watch algorithms discover what you'll love next.
+<img src="banner.svg" alt="CineGraph" width="800"/>
 
 CineGraph is a full-stack movie recommendation engine that makes its internals transparent. Every recommendation request streams live algorithm steps to the browser over WebSockets — watch Floyd-Warshall build a similarity matrix, Dijkstra trace a taste path between users, Merge Sort rank results, and Knapsack select your optimal watch list in real time.
 
